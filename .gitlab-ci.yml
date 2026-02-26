@@ -276,13 +276,25 @@ docker-prepare:
   image: amazon/aws-cli:latest
   only:
     - main
+  before_script:
+    - yum install -y unzip
   script:
-    - echo "Downloading latest runner zip from S3..."
+    - echo "Downloading and extracting runner and executor binaries from S3..."
     - aws s3 cp s3://${DEPLOY_BUCKET}/${NAME}/latest.zip ./latest.zip
-    - ls -lh latest.zip
+    - aws s3 cp s3://${DEPLOY_BUCKET}/executor/latest.zip ./executor.zip
+    - echo "Extracting runner binary..."
+    - unzip -j latest.zip '*amd64-linux*' -d ./
+    - mv *amd64-linux* runner-binary
+    - echo "Extracting executor binary..."
+    - unzip -j executor.zip '*amd64-linux*' -d ./
+    - mv *amd64-linux* executor-binary
+    - echo "Binaries extracted:"
+    - ls -lh runner-binary executor-binary
+    - rm -f latest.zip executor.zip
   artifacts:
     paths:
-      - latest.zip
+      - runner-binary
+      - executor-binary
     expire_in: 1 hour
 
 # Calculate next version number from Harbor
@@ -356,7 +368,7 @@ docker-build:
   before_script:
     # Verify files are present
     - echo "Checking for required files..."
-    - ls -lh latest.zip || echo "ERROR -  latest.zip not found"
+    - ls -lh runner-binary executor-binary || echo "ERROR - binaries not found"
     - echo "Version to build - ${NEW_TAG}"
 
     # Setup Kaniko auth for Harbor

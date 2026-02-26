@@ -6,8 +6,8 @@
 #   2. Docker: Pass environment variables, config auto-generated
 #
 # Prerequisites:
-#   - Place latest.zip in the project root before building
-#   - Or use the build-and-push.sh script which handles downloading from S3
+#   - runner-binary and executor-binary must be present in build context
+#   - These are extracted from S3 artifacts in the CI pipeline (docker-prepare stage)
 #
 # Build: docker build -t flomation-runner:latest .
 #
@@ -29,20 +29,16 @@ LABEL version="1.1"
 
 # Install runtime dependencies
 # - net-tools: Network utilities (netstat, etc.)
-# - zip/unzip: Archive handling for workflows and application extraction
 # - curl: HTTP client for API communication
 # - ca-certificates: SSL/TLS support
 # - jq: JSON processor for config validation
-# - aws-cli: Download executor from S3 during build (removed after)
+# - procps: Process utilities (for healthcheck)
 RUN apk add --no-cache \
     net-tools \
-    zip \
-    unzip \
     curl \
     ca-certificates \
-    jq\
-    procps \
-    aws-cli
+    jq \
+    procps
 
 # Create flomation user (non-root for security)
 # UID/GID 5000 to match RPM/DEB package specifications
@@ -56,25 +52,14 @@ RUN addgroup -g 5000 flomation && \
 # Set working directory
 WORKDIR /home/flomation
 
-# Copy the application zip file and extract it
-# The zip contains the application binary
-COPY latest.zip /tmp/latest.zip
+# Copy pre-extracted binaries (extracted in CI pipeline)
+# These are provided as artifacts from the docker-prepare stage
+COPY runner-binary /home/flomation/runner
+COPY executor-binary /home/flomation/executor
 
-# Extract the runner binary and clean up
-RUN unzip -o /tmp/latest.zip -d /home/platform && \
-    mv /home/flomation/*amd64-linux* /home/flomation/runner && \
-    chmod +x /home/flomation/runner && \
-    chown flomation:flomation /home/platform/runner && \
-    rm -f /tmp/latest.zip
-
-# Download executor binary from S3 and extract
-RUN aws s3 cp s3://flomation-dev-deployment/executor/flomation-executor-latest.zip /tmp/executor.zip && \
-    unzip -o /tmp/executor.zip -d /home/flomation && \
-    mv /home/flomation/*amd64-linux* /home/flomation/executor && \
-    chmod +x /home/flomation/executor && \
-    chown flomation:flomation /home/flomation/executor && \
-    rm -f /tmp/executor.zip && \
-    apk del aws-cli
+# Set permissions and ownership
+RUN chmod +x /home/flomation/runner /home/flomation/executor && \
+    chown flomation:flomation /home/flomation/runner /home/flomation/executor
 
 # Copy the entrypoint script
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
