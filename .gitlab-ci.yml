@@ -274,8 +274,8 @@ Deploy to Live:
 docker-prepare:
   stage: docker-prepare
   image: amazon/aws-cli:latest
-  only:
-    - main
+#  only:
+#    - main
   before_script:
     - yum install -y unzip
   script:
@@ -301,8 +301,8 @@ docker-prepare:
 docker-version:
   stage: docker-version
   image: alpine:latest
-  only:
-    - main
+#  only:
+#    - main
   before_script:
     - apk add --no-cache curl jq
   script:
@@ -360,8 +360,8 @@ docker-build:
   image:
     name: gcr.io/kaniko-project/executor:v1.9.0-debug
     entrypoint: [""]
-  only:
-    - main
+#  only:
+#    - main
   dependencies:
     - docker-prepare
     - docker-version
