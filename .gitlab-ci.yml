@@ -297,64 +297,6 @@ docker-prepare:
       - executor-binary
     expire_in: 1 hour
 
-# Calculate next version number from Harbor
-docker-version:
-  stage: docker-version
-  image: alpine:latest
-#  only:
-#    - main
-  before_script:
-    - apk add --no-cache curl jq
-  script:
-    - echo "Getting latest version from Harbor..."
-    # Check if credentials are set
-    - |
-    - if [ -z "${GITLAB_HARBOR_USER}" ]; then
-    - echo "ERROR - GITLAB_HARBOR_USER is not set!"
-    - exit 1
-    - fi
-    - |
-    - if [ -z "${GITLAB_HARBOR_PASSWORD}" ]; then
-    - echo "ERROR - GITLAB_HARBOR_PASSWORD is not set!"
-    - exit 1
-    - fi
-
-    - echo "Credentials are set, querying Harbor API..."
-    - |
-      LATEST_TAG=$(curl -k -s -u "${GITLAB_HARBOR_USER}:${GITLAB_HARBOR_PASSWORD}" \
-        "https://${HARBOR_REGISTRY}/api/v2.0/projects/${HARBOR_PROJECT}/repositories/${IMAGE_NAME}/artifacts?page=1&page_size=100" \
-        | jq -r '.[].tags[]?.name // empty' \
-        | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' \
-        | sort -V \
-        | tail -1)
-
-    - echo "Latest tag from Harbor -  ${LATEST_TAG}"
-
-    - |
-      if [ -z "$LATEST_TAG" ]; then
-        echo "No existing semantic version tags found. Starting at 1.0.1"
-        NEW_TAG="1.0.1"
-      else
-        echo "Latest tag found: ${LATEST_TAG}"
-      
-        # Split version using sh-compatible method
-        major=$(echo "$LATEST_TAG" | cut -d. -f1)
-        minor=$(echo "$LATEST_TAG" | cut -d. -f2)
-        patch=$(echo "$LATEST_TAG" | cut -d. -f3)
-      
-        echo "Parsed version - Major: ${major}, Minor: ${minor}, Patch: ${patch}"
-      
-        NEW_TAG="${major}.${minor}.${CI_PIPELINE_IID}"
-      fi
-
-    - echo "New version will be - ${NEW_TAG}"
-    - echo "NEW_TAG=${NEW_TAG}" > version.env
-    - cat version.env
-  artifacts:
-    reports:
-      dotenv: version.env
-    expire_in: 1 hour
-
 docker-build:
   stage: docker-build
   image:
@@ -364,13 +306,10 @@ docker-build:
 #    - main
   dependencies:
     - docker-prepare
-    - docker-version
   before_script:
     # Verify files are present
     - echo "Checking for required files..."
     - ls -lh runner-binary executor-binary || echo "ERROR - binaries not found"
-    - echo "Version to build - ${NEW_TAG}"
-
     # Setup Kaniko auth for Harbor
     - mkdir -p /kaniko/.docker
     - |
@@ -388,6 +327,7 @@ docker-build:
   script:
     - echo "Building and pushing Docker image..."
     - echo "Image path - ${HARBOR_IMAGE_PATH}"
+    - export NEW_TAG="1.0.${CI_PIPELINE_IID}"
     - echo "Tags - ${NEW_TAG} and latest"
     - |
       /kaniko/executor \
