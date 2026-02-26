@@ -13,7 +13,7 @@ stages:
   - Development
   - Production
   - docker-prepare
-  - docker-version
+  - docker-build-dev
   - docker-build
 
 variables:
@@ -274,8 +274,6 @@ Deploy to Live:
 docker-prepare:
   stage: docker-prepare
   image: amazon/aws-cli:latest
-#  only:
-#    - main
   before_script:
     - yum install -y unzip
   script:
@@ -296,14 +294,11 @@ docker-prepare:
       - runner-binary
       - executor-binary
     expire_in: 1 hour
-
-docker-build:
-  stage: docker-build
+docker-build-dev:
+  stage: docker-build-dev
   image:
     name: gcr.io/kaniko-project/executor:v1.9.0-debug
     entrypoint: [""]
-#  only:
-#    - main
   dependencies:
     - docker-prepare
   before_script:
@@ -333,8 +328,51 @@ docker-build:
       /kaniko/executor \
         --context "${CI_PROJECT_DIR}" \
         --dockerfile "Dockerfile" \
-        --destination "${HARBOR_IMAGE_PATH}:${NEW_TAG}" \
-        --destination "${HARBOR_IMAGE_PATH}:latest" \
+        --destination "${HARBOR_IMAGE_PATH}:${NEW_TAG}-dev" \
+        --destination "${HARBOR_IMAGE_PATH}:latest-dev" \
+        --skip-tls-verify \
+        --cache=true \
+        --cache-ttl=24h \
+        --verbosity=info
+
+docker-build:
+  stage: docker-build
+  image:
+    name: gcr.io/kaniko-project/executor:v1.9.0-debug
+    entrypoint: [""]
+  only:
+    - main
+  dependencies:
+    - docker-prepare
+  before_script:
+    # Verify files are present
+    - echo "Checking for required files..."
+    - ls -lh runner-binary executor-binary || echo "ERROR - binaries not found"
+    # Setup Kaniko auth for Harbor
+    - mkdir -p /kaniko/.docker
+    - |
+      cat > /kaniko/.docker/config.json <<EOF
+      {
+        "auths": {
+          "${HARBOR_REGISTRY}": {
+            "auth": "$(printf '%s:%s' "${GITLAB_HARBOR_USER}" "${GITLAB_HARBOR_PASSWORD}" | base64 | tr -d '\n')"
+          }
+        }
+      }
+      EOF
+    - echo "Kaniko authentication configured"
+
+  script:
+    - echo "Building and pushing Docker image..."
+    - echo "Image path - ${HARBOR_IMAGE_PATH}"
+    - export NEW_TAG="1.0.${CI_PIPELINE_IID}"
+    - echo "Tags - ${NEW_TAG} and latest"
+    - |
+      /kaniko/executor \
+        --context "${CI_PROJECT_DIR}" \
+        --dockerfile "Dockerfile" \
+        --destination "${HARBOR_IMAGE_PATH}:${NEW_TAG}-dev" \
+        --destination "${HARBOR_IMAGE_PATH}:latest-dev" \
         --skip-tls-verify \
         --cache=true \
         --cache-ttl=24h \
