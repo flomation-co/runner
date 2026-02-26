@@ -20,7 +20,7 @@
 #              -e RUNNER_REGISTRATION_CODE="your-code" \
 #              flomation-runner:latest
 
-FROM alpine:3.22.2
+FROM alpine:3.23.3
 
 # Metadata
 LABEL maintainer="build@flomation.co"
