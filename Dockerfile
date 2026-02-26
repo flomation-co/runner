@@ -43,10 +43,10 @@ RUN apk add --no-cache \
 # Create flomation user (non-root for security)
 # UID/GID 5000 to match RPM/DEB package specifications
 RUN addgroup -g 5000 flomation && \
-    adduser -D -u 5000 -G flomation -s /sbin/nologin -c "Flomation Service Account" flomation && \
+    adduser -D -u 5000 -G flomation -s /sbin/nologin -g "Flomation Service Account" flomation && \
     mkdir -p /home/flomation/executor/lib/modules && \
     mkdir -p /home/flomation/workspace && \
-    chown -R flomation:flomation /home/flomation \
+    chown -R flomation:flomation /home/flomation
 
 
 # Set working directory
