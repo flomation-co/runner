@@ -320,8 +320,8 @@ docker-version:
 
     - |
       if [ -z "$LATEST_TAG" ]; then
-        echo "No existing semantic version tags found. Starting at 0.0.1"
-        NEW_TAG="0.0.1"
+        echo "No existing semantic version tags found. Starting at 1.0.1"
+        NEW_TAG="1.0.1"
       else
         echo "Latest tag found: ${LATEST_TAG}"
       
