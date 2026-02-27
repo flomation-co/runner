@@ -10,6 +10,7 @@ stages:
   - rpm-publish
   - deb-publish
   - publish
+  - docker
   - Development
   - Production
   - docker-prepare
