@@ -300,3 +300,14 @@ build-docker-harbor:
   needs:
     - inject-metadata
     - docker-prepare
+
+
+build-docker:
+  extends: .build-docker-dhi-buildx-template
+  only:
+    - main
+  variables:
+    BINARY_FILE_PATTERN: "dist/flomation-*-amd64-linux-*"
+  needs:
+    - inject-metadata
+    - docker-prepare
