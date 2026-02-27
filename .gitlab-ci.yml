@@ -284,6 +284,9 @@ docker-prepare:
     - echo "Binaries extracted:"
     - ls -lh ./dist/
     - rm -f latest.zip executor.zip
+  needs:
+    - inject-metadata
+    - compile
   artifacts:
     paths:
       - ./dist/flomation*amd64-linux*
