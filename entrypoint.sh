@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-CONFIG_FILE="/home/flomation/config.json"
+CONFIG_FILE="/usr/local/bin/config.json"
 
 echo "=== Flomation Runner Startup ==="
 
@@ -94,4 +94,4 @@ echo "=== Starting Flomation Runner ==="
 echo ""
 
 # Execute the application
-exec /home/flomation/runner
+/usr/local/bin/flomation-runner
