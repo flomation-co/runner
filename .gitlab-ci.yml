@@ -289,5 +289,12 @@ docker-prepare:
     - compile
   artifacts:
     paths:
-      - ./dist/flomation*amd64-linux*
+      - ./dist/*flomation*amd64-linux*
     expire_in: 1 hour
+
+build-docker-harbor:
+  extends: .build-docker-dhi-harbor-buildx-template
+  variables:
+    BINARY_FILE_PATTERN: "dist/flomation-*-amd64-linux-*"
+  needs:
+    - docker-prepare
