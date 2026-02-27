@@ -13,7 +13,7 @@ stages:
   - Development
   - Production
   - docker-prepare
-  - docker-version
+  - docker-build-dev
   - docker-build
 
 variables:
@@ -274,91 +274,37 @@ Deploy to Live:
 docker-prepare:
   stage: docker-prepare
   image: amazon/aws-cli:latest
-  only:
-    - main
+  before_script:
+    - yum install -y unzip
   script:
-    - echo "Downloading latest runner zip from S3..."
+    - echo "Downloading and extracting runner and executor binaries from S3..."
     - aws s3 cp s3://${DEPLOY_BUCKET}/${NAME}/latest.zip ./latest.zip
-    - ls -lh latest.zip
+    - aws s3 cp s3://${DEPLOY_BUCKET}/executor/latest.zip ./executor.zip
+    - echo "Extracting runner binary..."
+    - unzip -j latest.zip '*amd64-linux*' -d ./
+    - mv *amd64-linux* runner-binary
+    - echo "Extracting executor binary..."
+    - unzip -j executor.zip '*amd64-linux*' -d ./
+    - mv *amd64-linux* executor-binary
+    - echo "Binaries extracted:"
+    - ls -lh runner-binary executor-binary
+    - rm -f latest.zip executor.zip
   artifacts:
     paths:
-      - latest.zip
+      - runner-binary
+      - executor-binary
     expire_in: 1 hour
-
-# Calculate next version number from Harbor
-docker-version:
-  stage: docker-version
-  image: alpine:latest
-  only:
-    - main
-  before_script:
-    - apk add --no-cache curl jq
-  script:
-    - echo "Getting latest version from Harbor..."
-    # Check if credentials are set
-    - |
-    - if [ -z "${GITLAB_HARBOR_USER}" ]; then
-    - echo "ERROR - GITLAB_HARBOR_USER is not set!"
-    - exit 1
-    - fi
-    - |
-    - if [ -z "${GITLAB_HARBOR_PASSWORD}" ]; then
-    - echo "ERROR - GITLAB_HARBOR_PASSWORD is not set!"
-    - exit 1
-    - fi
-
-    - echo "Credentials are set, querying Harbor API..."
-    - |
-      LATEST_TAG=$(curl -k -s -u "${GITLAB_HARBOR_USER}:${GITLAB_HARBOR_PASSWORD}" \
-        "https://${HARBOR_REGISTRY}/api/v2.0/projects/${HARBOR_PROJECT}/repositories/${IMAGE_NAME}/artifacts?page=1&page_size=100" \
-        | jq -r '.[].tags[]?.name // empty' \
-        | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' \
-        | sort -V \
-        | tail -1)
-
-    - echo "Latest tag from Harbor -  ${LATEST_TAG}"
-
-    - |
-      if [ -z "$LATEST_TAG" ]; then
-        echo "No existing semantic version tags found. Starting at 0.0.1"
-        NEW_TAG="0.0.1"
-      else
-        echo "Latest tag found: ${LATEST_TAG}"
-      
-        # Split version using sh-compatible method
-        major=$(echo "$LATEST_TAG" | cut -d. -f1)
-        minor=$(echo "$LATEST_TAG" | cut -d. -f2)
-        patch=$(echo "$LATEST_TAG" | cut -d. -f3)
-      
-        echo "Parsed version - Major: ${major}, Minor: ${minor}, Patch: ${patch}"
-      
-        NEW_TAG="${major}.${minor}.${CI_PIPELINE_IID}"
-      fi
-
-    - echo "New version will be - ${NEW_TAG}"
-    - echo "NEW_TAG=${NEW_TAG}" > version.env
-    - cat version.env
-  artifacts:
-    reports:
-      dotenv: version.env
-    expire_in: 1 hour
-
-docker-build:
-  stage: docker-build
+docker-build-dev:
+  stage: docker-build-dev
   image:
     name: gcr.io/kaniko-project/executor:v1.9.0-debug
     entrypoint: [""]
-  only:
-    - main
   dependencies:
     - docker-prepare
-    - docker-version
   before_script:
     # Verify files are present
     - echo "Checking for required files..."
-    - ls -lh latest.zip || echo "ERROR -  latest.zip not found"
-    - echo "Version to build - ${NEW_TAG}"
-
+    - ls -lh runner-binary executor-binary || echo "ERROR - binaries not found"
     # Setup Kaniko auth for Harbor
     - mkdir -p /kaniko/.docker
     - |
@@ -376,13 +322,57 @@ docker-build:
   script:
     - echo "Building and pushing Docker image..."
     - echo "Image path - ${HARBOR_IMAGE_PATH}"
+    - export NEW_TAG="1.0.${CI_PIPELINE_IID}"
     - echo "Tags - ${NEW_TAG} and latest"
     - |
       /kaniko/executor \
         --context "${CI_PROJECT_DIR}" \
         --dockerfile "Dockerfile" \
-        --destination "${HARBOR_IMAGE_PATH}:${NEW_TAG}" \
-        --destination "${HARBOR_IMAGE_PATH}:latest" \
+        --destination "${HARBOR_IMAGE_PATH}:${NEW_TAG}-dev" \
+        --destination "${HARBOR_IMAGE_PATH}:latest-dev" \
+        --skip-tls-verify \
+        --cache=true \
+        --cache-ttl=24h \
+        --verbosity=info
+
+docker-build:
+  stage: docker-build
+  image:
+    name: gcr.io/kaniko-project/executor:v1.9.0-debug
+    entrypoint: [""]
+  only:
+    - main
+  dependencies:
+    - docker-prepare
+  before_script:
+    # Verify files are present
+    - echo "Checking for required files..."
+    - ls -lh runner-binary executor-binary || echo "ERROR - binaries not found"
+    # Setup Kaniko auth for Harbor
+    - mkdir -p /kaniko/.docker
+    - |
+      cat > /kaniko/.docker/config.json <<EOF
+      {
+        "auths": {
+          "${HARBOR_REGISTRY}": {
+            "auth": "$(printf '%s:%s' "${GITLAB_HARBOR_USER}" "${GITLAB_HARBOR_PASSWORD}" | base64 | tr -d '\n')"
+          }
+        }
+      }
+      EOF
+    - echo "Kaniko authentication configured"
+
+  script:
+    - echo "Building and pushing Docker image..."
+    - echo "Image path - ${HARBOR_IMAGE_PATH}"
+    - export NEW_TAG="1.0.${CI_PIPELINE_IID}"
+    - echo "Tags - ${NEW_TAG} and latest"
+    - |
+      /kaniko/executor \
+        --context "${CI_PROJECT_DIR}" \
+        --dockerfile "Dockerfile" \
+        --destination "${HARBOR_IMAGE_PATH}:${NEW_TAG}-dev" \
+        --destination "${HARBOR_IMAGE_PATH}:latest-dev" \
         --skip-tls-verify \
         --cache=true \
         --cache-ttl=24h \
