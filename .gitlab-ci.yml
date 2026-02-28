@@ -13,6 +13,7 @@ stages:
   - docker-prepare
   - docker
   - Development
+  - test-suite
   - Production
 
 variables:
@@ -301,7 +302,6 @@ build-docker-harbor:
     - inject-metadata
     - docker-prepare
 
-
 build-docker:
   extends: .build-docker-dhi-buildx-template
   only:
@@ -311,3 +311,12 @@ build-docker:
   needs:
     - inject-metadata
     - docker-prepare
+
+test-suite:
+  extends: .test-suite-template
+  only:
+    - main
+  needs:
+    - inject-metadata
+    - compile
+    - "Deploy to DEV"
