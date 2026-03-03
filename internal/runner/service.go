@@ -345,10 +345,18 @@ func (s *Service) checkForExecutions() error {
 		return err
 	}
 
+	hash = sha256.Sum256(b)
+	signature, err = rsa.SignPSS(rand.Reader, s.signing.PrivateKeyBytes, crypto.SHA256, hash[:], nil)
+	if err != nil {
+		return err
+	}
+
 	req, err = http.NewRequest(http.MethodPost, fmt.Sprintf("%v/api/v1/execution/%v/state", s.config.RunnerConfig.Server, response.Execution.ID), bytes.NewReader(b))
 	if err != nil {
 		return err
 	}
+
+	req.Header.Set("X-Flomation-Runner-Signature", hex.EncodeToString(signature))
 
 	_, err = client.Do(req)
 	if err != nil {
@@ -403,10 +411,18 @@ func (s *Service) checkForExecutions() error {
 		return err
 	}
 
+	hash = sha256.Sum256(b)
+	signature, err = rsa.SignPSS(rand.Reader, s.signing.PrivateKeyBytes, crypto.SHA256, hash[:], nil)
+	if err != nil {
+		return err
+	}
+
 	req, err = http.NewRequest(http.MethodPost, url, bytes.NewReader(b))
 	if err != nil {
 		return err
 	}
+
+	req.Header.Set("X-Flomation-Runner-Signature", hex.EncodeToString(signature))
 
 	_, err = client.Do(req)
 	if err != nil {
