@@ -2,7 +2,6 @@
   "package": {
     "component_name": "runner",
     "name": "flomation-runner",
-    "nicename": "Flomation Runner",
     "summary": "Flomation Automate Runner Service",
     "description": "Flomation Automate Runner Service - Runner service for automation workflows",
     "license": "MIT",

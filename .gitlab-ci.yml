@@ -10,14 +10,14 @@ stages:
   - rpm-publish
   - deb-publish
   - publish
-  - docker-prepare
-  - docker
   - Development
-  - test-suite
   - Production
+  - docker-prepare
+  - docker-version
+  - docker-build
 
 variables:
-  VERSION: 1.0.${CI_PIPELINE_IID}
+  VERSION: 0.0.${CI_PIPELINE_IID}
   NAME: runner
   AWS_ACCESS_KEY_ID: ${GITLAB_AWS_USER_KEY}
   AWS_SECRET_ACCESS_KEY: ${GITLAB_AWS_USER_SECRET}
@@ -41,7 +41,7 @@ compile:
   artifacts:
     paths:
       - ./build.zip
-      - ./dist/flomation*
+      - ./dist/application
     expire_in: 1 hour
   cache:
     policy: push
@@ -54,14 +54,14 @@ build-rpm-8:
   variables:
     EL_VERSION: "8"
     CI_TEMPLATES_REF: "main"
-    APPLICATION_BINARY: "${PACKAGE_NAME}-amd64-linux*"
-    ARCH: x86_64
+#    APPLICATION_BINARY: "flomation-runner-amd64-linux*"
+#    ARCH: x86_64
   needs:
     - inject-metadata
     - compile
   artifacts:
     paths:
-      - ${PACKAGE_NAME}-*el8.*.rpm
+      - ${PACKAGE_NAME}-*el8*.rpm
     expire_in: 30 days
 
 build-rpm-9:
@@ -70,88 +70,28 @@ build-rpm-9:
   variables:
     EL_VERSION: "9"
     CI_TEMPLATES_REF: "main"
-    APPLICATION_BINARY: "${PACKAGE_NAME}-amd64-linux*"
-    ARCH: x86_64
+#    APPLICATION_BINARY: "flomation-runner-amd64-linux*"
+#    ARCH: x86_64
   needs:
     - inject-metadata
     - compile
   artifacts:
     paths:
-      - ${PACKAGE_NAME}-*el9.*.rpm
-    expire_in: 30 days
-
-build-rpm-8-arm64:
-  extends: .build-rpm-template
-  image: rockylinux/rockylinux:8
-  variables:
-    EL_VERSION: "8"
-    CI_TEMPLATES_REF: "main"
-    APPLICATION_BINARY: "${PACKAGE_NAME}-arm64-linux*"
-    ARCH: aarch64
-  needs:
-    - inject-metadata
-    - compile
-  artifacts:
-    paths:
-      - ${PACKAGE_NAME}-*el8.*.rpm
-    expire_in: 30 days
-
-build-rpm-9-arm64:
-  extends: .build-rpm-template
-  image: rockylinux/rockylinux:9
-  variables:
-    EL_VERSION: "9"
-    CI_TEMPLATES_REF: "main"
-    APPLICATION_BINARY: "${PACKAGE_NAME}-arm64-linux*"
-    ARCH: aarch64
-  needs:
-    - inject-metadata
-    - compile
-  artifacts:
-    paths:
-      - ${PACKAGE_NAME}-*el9.*.rpm
+      - ${PACKAGE_NAME}-*el9*.rpm
     expire_in: 30 days
 
 build-deb:
   extends: .build-deb-template
   variables:
     CI_TEMPLATES_REF: "main"
-    APPLICATION_BINARY: "${PACKAGE_NAME}-amd64-linux*"
-    ARCH: amd64
+#    APPLICATION_BINARY: "flomation-runner-amd64-linux*"
+#    ARCH: x86_64
   needs:
     - inject-metadata
     - compile
   artifacts:
     paths:
       - ${PACKAGE_NAME}_*.deb
-    expire_in: 30 days
-
-build-deb-arm64:
-  extends: .build-deb-template
-  variables:
-    CI_TEMPLATES_REF: "main"
-    APPLICATION_BINARY: "${PACKAGE_NAME}-arm64-linux*"
-    ARCH: arm64
-  needs:
-    - inject-metadata
-    - compile
-  artifacts:
-    paths:
-      - ${PACKAGE_NAME}_*.deb
-    expire_in: 30 days
-
-build-msi:
-  extends: .build-msi-template
-  variables:
-    CI_TEMPLATES_REF: "main"
-    APPLICATION_BINARY: "${PACKAGE_NAME}-amd64-windows*"
-    ARCH: x64
-  needs:
-    - inject-metadata
-    - compile
-  artifacts:
-    paths:
-      - ${PACKAGE_NAME}-*.msi
     expire_in: 30 days
 
 publish:
@@ -166,87 +106,37 @@ publish:
     paths:
       - ./build.zip
 
-publish-msi:
-  extends: .publish-msi-template
-  needs:
-    - inject-metadata
-    - build-msi
-
 publish-rpm-8:
   extends: .publish-rpm-template
   variables:
-    RPM_FILE_PATTERN: "${PACKAGE_NAME}-*el8.x86_64.rpm"
+    RPM_FILE_PATTERN: "${PACKAGE_NAME}-*el8*.rpm"
     EL_VERSION: "8"
     CI_TEMPLATES_REF: "main"
-    ARCH: x86_64
     S3_ACCESS_KEY_PARAM: ${S3_ACCESS_KEY_PARAM_DEV}
     S3_SECRET_KEY_PARAM: ${S3_SECRET_KEY_PARAM_DEV}
   needs:
-    - inject-metadata
     - build-rpm-8
 
 publish-rpm-9:
   extends: .publish-rpm-template
   variables:
-    RPM_FILE_PATTERN: "${PACKAGE_NAME}-*el9.x86_64.rpm"
+    RPM_FILE_PATTERN: "${PACKAGE_NAME}-*el9*.rpm"
     EL_VERSION: "9"
     CI_TEMPLATES_REF: "main"
-    ARCH: x86_64
     S3_ACCESS_KEY_PARAM: ${S3_ACCESS_KEY_PARAM_DEV}
     S3_SECRET_KEY_PARAM: ${S3_SECRET_KEY_PARAM_DEV}
   needs:
-    - inject-metadata
     - build-rpm-9
-
-publish-rpm-8-arm64:
-  extends: .publish-rpm-template
-  variables:
-    RPM_FILE_PATTERN: "${PACKAGE_NAME}-*el8.aarch64.rpm"
-    EL_VERSION: "8"
-    CI_TEMPLATES_REF: "main"
-    ARCH: aarch64
-    S3_ACCESS_KEY_PARAM: ${S3_ACCESS_KEY_PARAM_DEV}
-    S3_SECRET_KEY_PARAM: ${S3_SECRET_KEY_PARAM_DEV}
-  needs:
-    - inject-metadata
-    - build-rpm-8-arm64
-
-publish-rpm-9-arm64:
-  extends: .publish-rpm-template
-  variables:
-    RPM_FILE_PATTERN: "${PACKAGE_NAME}-*el9.aarch64.rpm"
-    EL_VERSION: "9"
-    CI_TEMPLATES_REF: "main"
-    ARCH: aarch64
-    S3_ACCESS_KEY_PARAM: ${S3_ACCESS_KEY_PARAM_DEV}
-    S3_SECRET_KEY_PARAM: ${S3_SECRET_KEY_PARAM_DEV}
-  needs:
-    - inject-metadata
-    - build-rpm-9-arm64
 
 publish-deb:
   extends: .publish-deb-template
   variables:
-    DEB_FILE_PATTERN: "${PACKAGE_NAME}_*_amd64.deb"
+    DEB_FILE_PATTERN: "${PACKAGE_NAME}_*.deb"
     CI_TEMPLATES_REF: "main"
-    ARCH: amd64
     S3_ACCESS_KEY_PARAM: ${S3_ACCESS_KEY_PARAM_DEV}
     S3_SECRET_KEY_PARAM: ${S3_SECRET_KEY_PARAM_DEV}
   needs:
-    - inject-metadata
     - build-deb
-
-publish-deb-arm64:
-  extends: .publish-deb-template
-  variables:
-    DEB_FILE_PATTERN: "${PACKAGE_NAME}_*_arm64.deb"
-    CI_TEMPLATES_REF: "main"
-    ARCH: arm64
-    S3_ACCESS_KEY_PARAM: ${S3_ACCESS_KEY_PARAM_DEV}
-    S3_SECRET_KEY_PARAM: ${S3_SECRET_KEY_PARAM_DEV}
-  needs:
-    - inject-metadata
-    - build-deb-arm64
 
 Deploy to DEV:
   stage: Development
@@ -274,49 +164,116 @@ Deploy to Live:
 docker-prepare:
   stage: docker-prepare
   image: amazon/aws-cli:latest
-  before_script:
-    - yum install -y unzip
+  only:
+    - main
   script:
-    - echo "Downloading and extracting runner and executor binaries from S3..."
-    - aws s3 cp s3://${DEPLOY_BUCKET}/executor/latest.zip ./executor.zip
-    - mkdir -p ./dist/
-    - echo "Extracting executor binary..."
-    - unzip -j executor.zip '*amd64-linux*' -d ./
-    - mv *amd64-linux* ./dist/
-    - echo "Binaries extracted:"
-    - ls -lh ./dist/
-    - rm -f latest.zip executor.zip
-  needs:
-    - inject-metadata
-    - compile
+    - echo "Downloading latest runner zip from S3..."
+    - aws s3 cp s3://${DEPLOY_BUCKET}/${NAME}/latest.zip ./latest.zip
+    - ls -lh latest.zip
   artifacts:
     paths:
-      - ./dist/*flomation*amd64-linux*
+      - latest.zip
     expire_in: 1 hour
 
-build-docker-harbor:
-  extends: .build-docker-dhi-harbor-buildx-template
-  variables:
-    BINARY_FILE_PATTERN: "dist/flomation-*-amd64-linux-*"
-  needs:
-    - inject-metadata
-    - docker-prepare
-
-build-docker:
-  extends: .build-docker-dhi-buildx-template
+# Calculate next version number from Harbor
+docker-version:
+  stage: docker-version
+  image: alpine:latest
   only:
     - main
-  variables:
-    BINARY_FILE_PATTERN: "dist/flomation-*-amd64-linux-*"
-  needs:
-    - inject-metadata
-    - docker-prepare
+  before_script:
+    - apk add --no-cache curl jq
+  script:
+    - echo "Getting latest version from Harbor..."
+    # Check if credentials are set
+    - |
+    - if [ -z "${GITLAB_HARBOR_USER}" ]; then
+    - echo "ERROR - GITLAB_HARBOR_USER is not set!"
+    - exit 1
+    - fi
+    - |
+    - if [ -z "${GITLAB_HARBOR_PASSWORD}" ]; then
+    - echo "ERROR - GITLAB_HARBOR_PASSWORD is not set!"
+    - exit 1
+    - fi
 
-test-suite:
-  extends: .test-suite-template
+    - echo "Credentials are set, querying Harbor API..."
+    - |
+      LATEST_TAG=$(curl -k -s -u "${GITLAB_HARBOR_USER}:${GITLAB_HARBOR_PASSWORD}" \
+        "https://${HARBOR_REGISTRY}/api/v2.0/projects/${HARBOR_PROJECT}/repositories/${IMAGE_NAME}/artifacts?page=1&page_size=100" \
+        | jq -r '.[].tags[]?.name // empty' \
+        | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' \
+        | sort -V \
+        | tail -1)
+
+    - echo "Latest tag from Harbor -  ${LATEST_TAG}"
+
+    - |
+      if [ -z "$LATEST_TAG" ]; then
+        echo "No existing semantic version tags found. Starting at 0.0.1"
+        NEW_TAG="0.0.1"
+      else
+        echo "Latest tag found: ${LATEST_TAG}"
+      
+        # Split version using sh-compatible method
+        major=$(echo "$LATEST_TAG" | cut -d. -f1)
+        minor=$(echo "$LATEST_TAG" | cut -d. -f2)
+        patch=$(echo "$LATEST_TAG" | cut -d. -f3)
+      
+        echo "Parsed version - Major: ${major}, Minor: ${minor}, Patch: ${patch}"
+      
+        NEW_TAG="${major}.${minor}.${CI_PIPELINE_IID}"
+      fi
+
+    - echo "New version will be - ${NEW_TAG}"
+    - echo "NEW_TAG=${NEW_TAG}" > version.env
+    - cat version.env
+  artifacts:
+    reports:
+      dotenv: version.env
+    expire_in: 1 hour
+
+docker-build:
+  stage: docker-build
+  image:
+    name: gcr.io/kaniko-project/executor:v1.9.0-debug
+    entrypoint: [""]
   only:
     - main
-  needs:
-    - inject-metadata
-    - compile
-    - "Deploy to DEV"
+  dependencies:
+    - docker-prepare
+    - docker-version
+  before_script:
+    # Verify files are present
+    - echo "Checking for required files..."
+    - ls -lh latest.zip || echo "ERROR -  latest.zip not found"
+    - echo "Version to build - ${NEW_TAG}"
+
+    # Setup Kaniko auth for Harbor
+    - mkdir -p /kaniko/.docker
+    - |
+      cat > /kaniko/.docker/config.json <<EOF
+      {
+        "auths": {
+          "${HARBOR_REGISTRY}": {
+            "auth": "$(printf '%s:%s' "${GITLAB_HARBOR_USER}" "${GITLAB_HARBOR_PASSWORD}" | base64 | tr -d '\n')"
+          }
+        }
+      }
+      EOF
+    - echo "Kaniko authentication configured"
+
+  script:
+    - echo "Building and pushing Docker image..."
+    - echo "Image path - ${HARBOR_IMAGE_PATH}"
+    - echo "Tags - ${NEW_TAG} and latest"
+    - |
+      /kaniko/executor \
+        --context "${CI_PROJECT_DIR}" \
+        --dockerfile "Dockerfile" \
+        --destination "${HARBOR_IMAGE_PATH}:${NEW_TAG}" \
+        --destination "${HARBOR_IMAGE_PATH}:latest" \
+        --skip-tls-verify \
+        --cache=true \
+        --cache-ttl=24h \
+        --verbosity=info

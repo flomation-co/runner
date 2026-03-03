@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	goconfig "github.com/flomation-co/go-config"
 	"os"
 	"path/filepath"
 )
@@ -28,20 +29,18 @@ func LoadState(path string) (*RunnerState, error) {
 }
 
 type RunnerConfig struct {
-	Server           string  `json:"url"`
-	RegistrationCode string  `json:"registration_code"`
-	Name             *string `json:"name"`
-	CheckInTimeout   int     `json:"checkin_timeout"`
+	Server              string  `json:"url"`
+	RegistrationCode    string  `json:"registration_code"`
+	Name                *string `json:"name"`
+	CheckInTimeout      int     `json:"checkin_timeout"`
+	CertificateFilename string  `json:"certificate"`
 }
 
 type ExecutionConfig struct {
-	MaxConcurrentExecutors   int64  `json:"max_concurrent_executors"`
-	StateDirectory           string `json:"state_directory"`
-	ExecutionDirectory       string `json:"execution_directory"`
-	ExecutorInstallDirectory string `json:"execution_install_dir"`
-	ExecutorModuleDirectory  string `json:"execution_module_dir"`
-	DownloadOnStart          bool   `json:"download_on_start"`
-	ExecutableName           string `json:"executable_name"`
+	MaxConcurrentExecutors int64  `json:"max_concurrent_executors"`
+	StateDirectory         string `json:"state_directory"`
+	ExecutionDirectory     string `json:"execution_directory"`
+	ExecutableName         string `json:"executable_name"`
 }
 
 type Config struct {
@@ -50,22 +49,20 @@ type Config struct {
 }
 
 func LoadConfig(path string) (*Config, error) {
+	var c Config
+
 	filePath := filepath.Join(".", filepath.Clean(path))
-	b, err := os.ReadFile(filePath)
-	if err != nil {
-		return nil, err
+	if err := goconfig.Load(&c, goconfig.String(filePath)); err != nil {
+		return &c, nil
 	}
 
-	var config Config
-
-	err = json.Unmarshal(b, &config)
-	if err != nil {
-		return nil, err
+	if c.ExecutionConfig.StateDirectory == "" {
+		c.ExecutionConfig.StateDirectory = "./"
 	}
 
-	if config.ExecutionConfig.StateDirectory == "" {
-		config.ExecutionConfig.StateDirectory = "./"
+	if c.RunnerConfig.CertificateFilename == "" {
+		c.RunnerConfig.CertificateFilename = "flomation-runner.pem"
 	}
 
-	return &config, nil
+	return &c, nil
 }
