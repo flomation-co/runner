@@ -2,3 +2,5 @@
 dist/
 *.zip
 executor/
+*.pem
+config.json

@@ -3,7 +3,8 @@ module flomation.app/automate/runner
 go 1.26.0
 
 require (
-	github.com/onsi/gomega v1.38.2
+	github.com/flomation-co/go-config v0.0.0-20260116170906-0989aa9f4668
+	github.com/onsi/gomega v1.39.0
 	github.com/sirupsen/logrus v1.9.3
 )
 

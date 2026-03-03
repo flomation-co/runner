@@ -2,7 +2,15 @@ package runner
 
 import (
 	"bytes"
+	"crypto"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
+	"crypto/x509"
+	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -20,23 +28,36 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+type SigningConfig struct {
+	PrivateKeyBytes *rsa.PrivateKey
+	PublicKeyBytes  []byte
+}
+
 type Service struct {
 	state       *config.RunnerState
 	config      *config.Config
 	executor    *executor.Service
+	signing     *SigningConfig
 	running     bool
 	lastCheckIn *time.Time
 }
 
 type Runner struct {
-	ID               string     `json:"id"`
-	Identifier       string     `json:"identifier"`
-	Name             string     `json:"name"`
-	RegistrationCode string     `json:"registration_code"`
-	EnrolledAt       time.Time  `json:"enrolled_at"`
-	LastContactAt    *time.Time `json:"last_contact_at"`
-	IPAddress        *string    `json:"ip_address"`
-	Version          *string    `json:"version"`
+	ID               string      `json:"id"`
+	Identifier       string      `json:"identifier"`
+	Name             string      `json:"name"`
+	RegistrationCode string      `json:"registration_code"`
+	EnrolledAt       time.Time   `json:"enrolled_at"`
+	LastContactAt    *time.Time  `json:"last_contact_at"`
+	IPAddress        *string     `json:"ip_address"`
+	Version          *string     `json:"version"`
+	ExecutorVersion  *string     `json:"executor_version"`
+	Manifest         interface{} `json:"manifest"`
+	PublicKey        *string     `json:"public_key" `
+}
+
+type RunnerRequest struct {
+	RequestedAt time.Time `json:"requested_at"`
 }
 
 const FloStateFilename = "flo.state"
@@ -70,6 +91,12 @@ func NewService(cfg *config.Config) (*Service, error) {
 
 	s.state = rs
 
+	if err := s.generateKeys(); err != nil {
+		log.WithFields(log.Fields{
+			"error": err,
+		}).Error("unable to generate runner private key")
+	}
+
 	if err := s.registerRunner(); err != nil {
 		log.WithFields(log.Fields{
 			"error": err,
@@ -82,6 +109,100 @@ func NewService(cfg *config.Config) (*Service, error) {
 	return &s, nil
 }
 
+func (s *Service) generateKeys() error {
+	if s.config.RunnerConfig.CertificateFilename == "" {
+		return nil
+	}
+
+	if b, err := os.ReadFile(s.config.RunnerConfig.CertificateFilename); err == nil {
+		block, _ := pem.Decode(b)
+		if block == nil {
+			return errors.New("invalid pem file")
+		}
+
+		switch block.Type {
+		case "RSA PRIVATE KEY":
+			key, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+			if err != nil {
+				return err
+			}
+
+			publicBytes, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
+			if err != nil {
+				return err
+			}
+
+			publicPem := pem.EncodeToMemory(&pem.Block{
+				Type:  "PUBLIC KEY",
+				Bytes: publicBytes,
+			})
+
+			s.signing = &SigningConfig{
+				PrivateKeyBytes: key,
+				PublicKeyBytes:  publicPem,
+			}
+
+		case "PRIVATE KEY":
+			key, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+			if err != nil {
+				return err
+			}
+			rsaKey, ok := key.(*rsa.PrivateKey)
+			if !ok {
+				return errors.New("invalid pem format")
+			}
+
+			publicBytes, err := x509.MarshalPKIXPublicKey(&rsaKey.PublicKey)
+			if err != nil {
+				return err
+			}
+
+			publicPem := pem.EncodeToMemory(&pem.Block{
+				Type:  "PUBLIC KEY",
+				Bytes: publicBytes,
+			})
+
+			s.signing.PrivateKeyBytes = rsaKey
+			s.signing.PublicKeyBytes = publicPem
+		default:
+			return errors.New("invalid private key type")
+		}
+
+		return nil
+	}
+
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return err
+	}
+
+	p := pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(key),
+	})
+
+	publicBytes, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
+	if err != nil {
+		return err
+	}
+
+	publicPem := pem.EncodeToMemory(&pem.Block{
+		Type:  "PUBLIC KEY",
+		Bytes: publicBytes,
+	})
+
+	s.signing = &SigningConfig{
+		PrivateKeyBytes: key,
+		PublicKeyBytes:  publicPem,
+	}
+
+	if err := os.WriteFile(s.config.RunnerConfig.CertificateFilename, p, 0600); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (s *Service) registerRunner() error {
 	client := http.Client{
 		Timeout: time.Second * 15,
@@ -92,11 +213,28 @@ func (s *Service) registerRunner() error {
 		name = *s.config.RunnerConfig.Name
 	}
 
+	v, err := s.executor.Version()
+	if err != nil {
+		return err
+	}
+
+	manifest, err := s.executor.Manifest()
+	if err != nil {
+		return err
+	}
+
 	runner := Runner{
 		Identifier:       s.state.ID,
 		RegistrationCode: s.config.RunnerConfig.RegistrationCode,
 		Name:             name,
 		Version:          &version.Version,
+		ExecutorVersion:  v,
+		Manifest:         manifest,
+	}
+
+	if s.signing != nil && len(s.signing.PublicKeyBytes) > 0 {
+		k := string(s.signing.PublicKeyBytes)
+		runner.PublicKey = &k
 	}
 
 	b, err := json.Marshal(runner)
@@ -126,10 +264,27 @@ func (s *Service) checkForExecutions() error {
 		Timeout: time.Second * 15,
 	}
 
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%v/api/v1/runner/%v/execution", s.config.RunnerConfig.Server, s.state.ID), nil)
+	update := RunnerRequest{
+		RequestedAt: time.Now().UTC(),
+	}
+
+	k, err := json.Marshal(update)
 	if err != nil {
 		return err
 	}
+
+	hash := sha256.Sum256(k)
+	signature, err := rsa.SignPSS(rand.Reader, s.signing.PrivateKeyBytes, crypto.SHA256, hash[:], nil)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%v/api/v1/runner/%v/execution", s.config.RunnerConfig.Server, s.state.ID), bytes.NewBuffer(k))
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("X-Flomation-Runner-Signature", hex.EncodeToString(signature))
 
 	res, err := client.Do(req)
 	if err != nil {
