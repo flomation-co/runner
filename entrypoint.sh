@@ -1,7 +1,7 @@
-#!/bin/bash
+#!/bin/sh
 set -e
 
-CONFIG_FILE="/home/platform/config.json"
+CONFIG_FILE="/usr/local/bin/config.json"
 
 echo "=== Flomation Runner Startup ==="
 
@@ -12,7 +12,7 @@ if [ -f "$CONFIG_FILE" ]; then
 else
     echo "✗ Config file not found at $CONFIG_FILE"
     echo "  Assuming Docker deployment - checking for environment variables..."
-    
+
     # Check if required environment variables are set
     if [ -z "$RUNNER_NAME" ] || [ -z "$RUNNER_URL" ] || [ -z "$RUNNER_REGISTRATION_CODE" ]; then
         echo ""
@@ -26,9 +26,9 @@ else
         echo "Optional environment variables:"
         echo "  RUNNER_CHECKIN_TIMEOUT      - Check-in timeout in seconds (default: 5)"
         echo "  EXECUTOR_MAX_CONCURRENT     - Max concurrent executors (default: 5)"
-        echo "  EXECUTOR_DIRECTORY          - Execution directory (default: /home/platform/workspace/)"
-        echo "  EXECUTOR_INSTALL_DIR        - Executor install directory (default: /home/platform/executor/lib)"
-        echo "  EXECUTOR_MODULE_DIR         - Executor module directory (default: /home/platform/executor/lib/modules)"
+        echo "  EXECUTOR_DIRECTORY          - Execution directory (default: /home/flomation/workspace/)"
+        echo "  EXECUTOR_INSTALL_DIR        - Executor install directory (default: /home/flomation/executor/lib)"
+        echo "  EXECUTOR_MODULE_DIR         - Executor module directory (default: /home/flomation/executor/lib/modules)"
         echo "  EXECUTOR_DOWNLOAD_ON_START  - Download on start (default: true)"
         echo ""
         echo "Example Docker run command:"
@@ -39,17 +39,17 @@ else
         echo ""
         exit 1
     fi
-    
+
     # Set defaults for optional variables
     RUNNER_CHECKIN_TIMEOUT=${RUNNER_CHECKIN_TIMEOUT:-5}
     EXECUTOR_MAX_CONCURRENT=${EXECUTOR_MAX_CONCURRENT:-5}
-    EXECUTOR_DIRECTORY=${EXECUTOR_DIRECTORY:-/home/platform/workspace/}
-    EXECUTOR_INSTALL_DIR=${EXECUTOR_INSTALL_DIR:-/home/platform/executor/lib}
-    EXECUTOR_MODULE_DIR=${EXECUTOR_MODULE_DIR:-/home/platform/executor/lib/modules}
+    EXECUTOR_DIRECTORY=${EXECUTOR_DIRECTORY:-/home/flomation/workspace/}
+    EXECUTOR_INSTALL_DIR=${EXECUTOR_INSTALL_DIR:-/home/flomation/executor/lib}
+    EXECUTOR_MODULE_DIR=${EXECUTOR_MODULE_DIR:-/home/flomation/executor/lib/modules}
     EXECUTOR_DOWNLOAD_ON_START=${EXECUTOR_DOWNLOAD_ON_START:-true}
-    
+
     echo "✓ Environment variables found - generating config.json"
-    
+
     # Generate config.json from environment variables
     cat > "$CONFIG_FILE" <<EOF
 {
@@ -68,9 +68,9 @@ else
   }
 }
 EOF
-    
+
     echo "✓ Config file generated successfully"
-    
+
     # Show generated config (mask sensitive data)
     echo ""
     echo "Generated configuration:"
@@ -94,4 +94,4 @@ echo "=== Starting Flomation Runner ==="
 echo ""
 
 # Execute the application
-exec /home/platform/application
+/usr/local/bin/flomation-runner
