@@ -1,6 +1,6 @@
 *.state
 dist/
 *.zip
-executor/
+executor/*
 *.pem
 config.json
