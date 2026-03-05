@@ -89,6 +89,12 @@ func NewService(cfg *config.Config) (*Service, error) {
 		}
 	}
 
+	if _, err := os.Stat(s.config.ExecutionConfig.ExecutionDirectory); os.IsNotExist(err) {
+		if err := os.MkdirAll(s.config.ExecutionConfig.ExecutionDirectory, 0750); err != nil {
+			return nil, err
+		}
+	}
+
 	s.state = rs
 
 	if err := s.generateKeys(); err != nil {
