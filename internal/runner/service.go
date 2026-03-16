@@ -285,7 +285,7 @@ func (s *Service) checkForExecutions() error {
 		return err
 	}
 
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%v/api/v1/runner/%v/execution", s.config.RunnerConfig.Server, s.state.ID), bytes.NewBuffer(k))
+	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%v/api/v1/runner/%v/execution", s.config.RunnerConfig.Server, s.state.ID), bytes.NewBuffer(k))
 	if err != nil {
 		return err
 	}
