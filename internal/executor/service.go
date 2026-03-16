@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"strings"
 
 	"flomation.app/automate/runner/internal/config"
@@ -98,6 +99,17 @@ func (s *Service) Execute(id string, flow string, path string, entry string, env
 	if environment != nil {
 		args = append(args, "--environment")
 		args = append(args, *environment)
+	}
+
+	if s.config.RunnerConfig.CertificateFilename != "" {
+		wd, err := os.Getwd()
+		if err != nil {
+			return nil, false, err
+		}
+
+		certificatePath := filepath.Join(wd, s.config.RunnerConfig.CertificateFilename)
+		args = append(args, "--key")
+		args = append(args, certificatePath)
 	}
 
 	executionParts := strings.Split(s.config.ExecutionConfig.ExecutableName, " ")
