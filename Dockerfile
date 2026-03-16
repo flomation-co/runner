@@ -3,8 +3,6 @@ FROM dhi.io/alpine-base:3.23-alpine3.23-dev
 
 # Install pre-requisite tools
 RUN apk add --no-cache \
-     net-tools \
-     curl \
      ca-certificates \
      jq \
      procps

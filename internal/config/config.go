@@ -2,9 +2,10 @@ package config
 
 import (
 	"encoding/json"
-	goconfig "github.com/flomation-co/go-config"
 	"os"
 	"path/filepath"
+
+	goconfig "github.com/flomation-co/go-config"
 )
 
 type RunnerState struct {
@@ -29,18 +30,18 @@ func LoadState(path string) (*RunnerState, error) {
 }
 
 type RunnerConfig struct {
-	Server              string  `json:"url"`
-	RegistrationCode    string  `json:"registration_code"`
-	Name                *string `json:"name"`
-	CheckInTimeout      int     `json:"checkin_timeout"`
-	CertificateFilename string  `json:"certificate"`
+	Server              string  `json:"url" env:"FLOMATION_API" arg:"api-url"`
+	RegistrationCode    string  `json:"registration_code" env:"FLOMATION_REGISTRATION_CODE" arg:"registration-code"`
+	Name                *string `json:"name" env:"FLOMATION_RUNNER_NAME" arg:"runner-name"`
+	CheckInTimeout      int     `json:"checkin_timeout" env:"FLOMATION_RUNNER_CHECKIN_TIMEOUT" arg:"checkin-timeout"`
+	CertificateFilename string  `json:"certificate" env:"FLOMATION_RUNNER_CERTIFICATE_PATH" arg:"certificate-filename"`
 }
 
 type ExecutionConfig struct {
-	MaxConcurrentExecutors int64  `json:"max_concurrent_executors"`
-	StateDirectory         string `json:"state_directory"`
-	ExecutionDirectory     string `json:"execution_directory"`
-	ExecutableName         string `json:"executable_name"`
+	MaxConcurrentExecutors int64  `json:"max_concurrent_executors" env:"FLOMATION_RUNNER_MAX_EXECUTORS" arg:"max_concurrent_executors"`
+	StateDirectory         string `json:"state_directory" env:"FLOMATION_RUNNER_STATE_DIRECTORY" arg:"state_directory"`
+	ExecutionDirectory     string `json:"execution_directory" env:"FLOMATION_RUNNER_EXECUTION_DIRECTORY" arg:"execution_directory"`
+	ExecutableName         string `json:"executable_name" env:"FLOMATION_RUNNER_EXECUTABLE_NAME" arg:"executable_name"`
 }
 
 type Config struct {
