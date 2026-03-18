@@ -52,9 +52,9 @@ compile:
 
 generate-docs:
   extends: .generate-docs-template
-  rules:
-    - changes:
-        - internal/config/*
+  only:
+    - main
+  when: manual
   variables:
     DOCS_SOURCE_FILE: internal/config/config.go
     DOCS_COMPONENT_NAME: ${NAME}
@@ -185,12 +185,11 @@ publish:
 
 publish-docs:
   extends: .publish-docs-template
-  rules:
-    - changes:
-        - internal/config/*
+  only:
+    - main
   variables:
     DOCS_S3_PATH: docs/flomation/config
-  dependencies:
+  needs:
     - generate-docs
 
 publish-msi:
