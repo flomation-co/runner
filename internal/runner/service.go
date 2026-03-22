@@ -370,7 +370,8 @@ func (s *Service) checkForExecutions() error {
 	}
 
 	hasErrored := false
-	output, success, err := s.executor.Execute(response.Execution.ID, response.Execution.FloID, "execution.flow", "", response.Flow.EnvironmentID)
+	logCallback := s.createLogCallback(response.Execution.ID)
+	output, success, err := s.executor.Execute(response.Execution.ID, response.Execution.FloID, "execution.flow", "", response.Flow.EnvironmentID, logCallback)
 	if err != nil || !success {
 		hasErrored = true
 	}
@@ -442,6 +443,43 @@ func (s *Service) checkForExecutions() error {
 	}
 
 	return nil
+}
+
+func (s *Service) createLogCallback(executionID string) executor.LogCallback {
+	return func(lines []string) {
+		payload := struct {
+			Lines []string `json:"lines"`
+		}{
+			Lines: lines,
+		}
+
+		b, err := json.Marshal(payload)
+		if err != nil {
+			return
+		}
+
+		hash := sha256.Sum256(b)
+		signature, err := rsa.SignPSS(rand.Reader, s.signing.PrivateKeyBytes, crypto.SHA256, hash[:], nil)
+		if err != nil {
+			return
+		}
+
+		url := fmt.Sprintf("%v/api/v1/execution/%v/logs", s.config.RunnerConfig.Server, executionID)
+		req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(b))
+		if err != nil {
+			return
+		}
+
+		req.Header.Set("X-Flomation-Runner-Signature", hex.EncodeToString(signature))
+
+		client := http.Client{Timeout: time.Second * 5}
+		if _, err := client.Do(req); err != nil {
+			log.WithFields(log.Fields{
+				"error":        err,
+				"execution_id": executionID,
+			}).Warn("unable to stream log to API")
+		}
+	}
 }
 
 func (s *Service) monitor() {

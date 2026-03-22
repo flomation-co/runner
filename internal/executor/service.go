@@ -1,17 +1,22 @@
 package executor
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
-	"path"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"flomation.app/automate/runner/internal/config"
 	log "github.com/sirupsen/logrus"
 )
+
+// LogCallback is called with batches of log lines as they arrive from the executor.
+type LogCallback func(lines []string)
 
 type Service struct {
 	config *config.Config
@@ -43,7 +48,7 @@ func (s *Service) Manifest() (interface{}, error) {
 		return nil, err
 	}
 
-	b, err := os.ReadFile(path.Join(s.config.ExecutionConfig.ExecutionDirectory, filename))
+	b, err := os.ReadFile(filepath.Join(s.config.ExecutionConfig.ExecutionDirectory, filename))
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +83,7 @@ func (s *Service) Version() (*string, error) {
 	return &output, nil
 }
 
-func (s *Service) Execute(id string, flow string, path string, entry string, environment *string) (*string, bool, error) {
+func (s *Service) Execute(id string, flow string, path string, entry string, environment *string, onLog LogCallback) (*string, bool, error) {
 	args := []string{
 		"--output",
 		"json",
@@ -132,18 +137,56 @@ func (s *Service) Execute(id string, flow string, path string, entry string, env
 	}
 
 	// #nosec G204 -- Parameters for Executor are intentional and controlled
-	fmt.Printf("%v %v %v\n", executionDirectory, executionParts[0], args)
 	cmd := exec.Command(executionParts[0], args...)
 	cmd.Dir = executionDirectory
 
-	out, err := cmd.CombinedOutput()
-	output := string(out)
+	// Pipe stdout and stderr for real-time streaming
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, false, err
+	}
+
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		return nil, false, err
+	}
+
+	if err := cmd.Start(); err != nil {
+		return nil, false, err
+	}
+
+	// Read both stdout and stderr concurrently, collecting all output
+	var allLines []string
+	var mu sync.Mutex
+
+	readPipe := func(pipe io.ReadCloser) {
+		scanner := bufio.NewScanner(pipe)
+		for scanner.Scan() {
+			line := scanner.Text()
+			mu.Lock()
+			allLines = append(allLines, line)
+			mu.Unlock()
+
+			if onLog != nil {
+				onLog([]string{line})
+			}
+		}
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() { defer wg.Done(); readPipe(stdoutPipe) }()
+	go func() { defer wg.Done(); readPipe(stderrPipe) }()
+	wg.Wait()
+
+	err = cmd.Wait()
+	output := strings.Join(allLines, "\n")
+
 	if err != nil {
 		log.WithFields(log.Fields{
-			"id":     id,
-			"path":   path,
-			"entry":  entry,
-			"output": string(out),
+			"id":    id,
+			"path":  path,
+			"entry": entry,
 		}).Info("execution failed")
 		return &output, cmd.ProcessState.Success(), err
 	}
