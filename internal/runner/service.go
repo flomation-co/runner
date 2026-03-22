@@ -387,6 +387,7 @@ func (s *Service) checkForExecutions() error {
 			"error": err,
 		}).Error("error reading state file")
 
+		hasErrored = true
 		state = map[string]interface{}{
 			"error":  err.Error(),
 			"output": output,
@@ -397,9 +398,14 @@ func (s *Service) checkForExecutions() error {
 				"error": err,
 			}).Error("error parsing state file")
 
+			hasErrored = true
 			state = map[string]interface{}{
 				"error":  err.Error(),
 				"output": output,
+			}
+		} else if status, ok := state["status"]; ok {
+			if s, ok := status.(float64); ok && s != 0 {
+				hasErrored = true
 			}
 		}
 	}
