@@ -369,9 +369,41 @@ func (s *Service) checkForExecutions() error {
 		return err
 	}
 
+	// Write trigger invocation data if present
+	var triggerDataPath string
+	if response.Execution.Data != nil {
+		var tdBytes []byte
+
+		// Data may already be a map, string, or raw JSON — normalise to a JSON object
+		switch v := response.Execution.Data.(type) {
+		case string:
+			// Could be a JSON string containing an object — try to use it directly
+			if len(v) > 2 && v[0] == '{' {
+				tdBytes = []byte(v)
+			} else {
+				// Try to unmarshal the string as JSON
+				var inner interface{}
+				if err := json.Unmarshal([]byte(v), &inner); err == nil {
+					tdBytes, _ = json.Marshal(inner)
+				}
+			}
+		default:
+			tdBytes, _ = json.Marshal(v)
+		}
+
+		if len(tdBytes) > 2 {
+			tdFile := fmt.Sprintf("%v/%v/%v/trigger-data.json", s.config.ExecutionConfig.ExecutionDirectory, response.Execution.FloID, response.Execution.ID)
+			if err := os.WriteFile(tdFile, tdBytes, 0600); err != nil {
+				log.WithFields(log.Fields{"error": err}).Warn("unable to write trigger data file")
+			} else {
+				triggerDataPath = "trigger-data.json"
+			}
+		}
+	}
+
 	hasErrored := false
 	logCallback := s.createLogCallback(response.Execution.ID)
-	output, success, err := s.executor.Execute(response.Execution.ID, response.Execution.FloID, "execution.flow", "", response.Flow.EnvironmentID, logCallback)
+	output, success, err := s.executor.Execute(response.Execution.ID, response.Execution.FloID, "execution.flow", "", response.Flow.EnvironmentID, triggerDataPath, logCallback)
 	if err != nil || !success {
 		hasErrored = true
 	}
