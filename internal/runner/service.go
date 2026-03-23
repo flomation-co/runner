@@ -372,8 +372,26 @@ func (s *Service) checkForExecutions() error {
 	// Write trigger invocation data if present
 	var triggerDataPath string
 	if response.Execution.Data != nil {
-		tdBytes, err := json.Marshal(response.Execution.Data)
-		if err == nil && len(tdBytes) > 2 { // more than just "{}"
+		var tdBytes []byte
+
+		// Data may already be a map, string, or raw JSON — normalise to a JSON object
+		switch v := response.Execution.Data.(type) {
+		case string:
+			// Could be a JSON string containing an object — try to use it directly
+			if len(v) > 2 && v[0] == '{' {
+				tdBytes = []byte(v)
+			} else {
+				// Try to unmarshal the string as JSON
+				var inner interface{}
+				if err := json.Unmarshal([]byte(v), &inner); err == nil {
+					tdBytes, _ = json.Marshal(inner)
+				}
+			}
+		default:
+			tdBytes, _ = json.Marshal(v)
+		}
+
+		if len(tdBytes) > 2 {
 			tdFile := fmt.Sprintf("%v/%v/%v/trigger-data.json", s.config.ExecutionConfig.ExecutionDirectory, response.Execution.FloID, response.Execution.ID)
 			if err := os.WriteFile(tdFile, tdBytes, 0600); err != nil {
 				log.WithFields(log.Fields{"error": err}).Warn("unable to write trigger data file")
