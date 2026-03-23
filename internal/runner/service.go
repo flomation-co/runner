@@ -401,9 +401,45 @@ func (s *Service) checkForExecutions() error {
 		}
 	}
 
+	// Write execution context for ${flow.xxx} variable substitution
+	var contextPath string
+	{
+		stringOrEmpty := func(s *string) string {
+			if s != nil {
+				return *s
+			}
+			return ""
+		}
+
+		ctx := map[string]interface{}{
+			"flow_id":         response.Execution.FloID,
+			"execution_id":    response.Execution.ID,
+			"sequence":        response.Execution.Sequence,
+			"author_id":       response.Execution.OwnerID,
+			"organisation_id": stringOrEmpty(response.Flow.OrganisationID),
+			"runner_id":       s.state.ID,
+			"start_time":      time.Now().UTC().Format(time.RFC3339),
+			"trigger_type":    stringOrEmpty(response.Execution.TriggerType),
+			"author_email":    stringOrEmpty(response.Execution.AuthorEmail),
+			"triggerer_email": stringOrEmpty(response.Execution.TriggererEmail),
+		}
+
+		ctxBytes, err := json.Marshal(ctx)
+		if err != nil {
+			log.WithFields(log.Fields{"error": err}).Warn("unable to marshal execution context")
+		} else {
+			ctxFile := fmt.Sprintf("%v/%v/%v/context.json", s.config.ExecutionConfig.ExecutionDirectory, response.Execution.FloID, response.Execution.ID)
+			if err := os.WriteFile(ctxFile, ctxBytes, 0600); err != nil {
+				log.WithFields(log.Fields{"error": err}).Warn("unable to write execution context file")
+			} else {
+				contextPath = "context.json"
+			}
+		}
+	}
+
 	hasErrored := false
 	logCallback := s.createLogCallback(response.Execution.ID)
-	output, success, err := s.executor.Execute(response.Execution.ID, response.Execution.FloID, "execution.flow", "", response.Flow.EnvironmentID, triggerDataPath, logCallback)
+	output, success, err := s.executor.Execute(response.Execution.ID, response.Execution.FloID, "execution.flow", "", response.Flow.EnvironmentID, triggerDataPath, contextPath, logCallback)
 	if err != nil || !success {
 		hasErrored = true
 	}
