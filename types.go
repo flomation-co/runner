@@ -34,6 +34,9 @@ type Execution struct {
 	Sequence         int64       `json:"sequence" db:"sequence"`
 	Data             interface{} `json:"data" db:"data"`
 	RunnerID         *string     `json:"runner_id" db:"runner_id"`
+	TriggerType      *string     `json:"trigger_type,omitempty"`
+	AuthorEmail      *string     `json:"author_email,omitempty"`
+	TriggererEmail   *string     `json:"triggerer_email,omitempty"`
 }
 
 type PendingExecution struct {
