@@ -412,9 +412,8 @@ func (s *Service) checkForExecutions() error {
 	time.Sleep(time.Second * 5)
 
 	var state map[string]interface{}
-	stateFilePath := fmt.Sprintf("%v/%v/%v/state.json", s.config.ExecutionConfig.ExecutionDirectory, response.Execution.FloID, response.Execution.ID)
-	filePath := filepath.Join(".", filepath.Clean(stateFilePath))
-	sb, err := os.ReadFile(filePath)
+	stateFilePath := filepath.Join(s.config.ExecutionConfig.ExecutionDirectory, response.Execution.FloID, response.Execution.ID, "state.json")
+	sb, err := os.ReadFile(stateFilePath)
 	if err != nil {
 		log.WithFields(log.Fields{
 			"error": err,
