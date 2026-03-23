@@ -412,8 +412,14 @@ func (s *Service) checkForExecutions() error {
 	time.Sleep(time.Second * 5)
 
 	var state map[string]interface{}
-	stateFilePath := filepath.Join(s.config.ExecutionConfig.ExecutionDirectory, response.Execution.FloID, response.Execution.ID, "state.json")
-	sb, err := os.ReadFile(stateFilePath)
+	stateRoot, err := os.OpenRoot(s.config.ExecutionConfig.ExecutionDirectory)
+	if err != nil {
+		log.WithFields(log.Fields{"error": err}).Error("unable to open execution directory root")
+		return err
+	}
+	defer stateRoot.Close()
+	stateRelPath := filepath.Join(response.Execution.FloID, response.Execution.ID, "state.json")
+	sb, err := stateRoot.ReadFile(stateRelPath)
 	if err != nil {
 		log.WithFields(log.Fields{
 			"error": err,
