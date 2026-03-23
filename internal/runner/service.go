@@ -369,9 +369,23 @@ func (s *Service) checkForExecutions() error {
 		return err
 	}
 
+	// Write trigger invocation data if present
+	var triggerDataPath string
+	if response.Execution.Data != nil {
+		tdBytes, err := json.Marshal(response.Execution.Data)
+		if err == nil && len(tdBytes) > 2 { // more than just "{}"
+			tdFile := fmt.Sprintf("%v/%v/%v/trigger-data.json", s.config.ExecutionConfig.ExecutionDirectory, response.Execution.FloID, response.Execution.ID)
+			if err := os.WriteFile(tdFile, tdBytes, 0600); err != nil {
+				log.WithFields(log.Fields{"error": err}).Warn("unable to write trigger data file")
+			} else {
+				triggerDataPath = "trigger-data.json"
+			}
+		}
+	}
+
 	hasErrored := false
 	logCallback := s.createLogCallback(response.Execution.ID)
-	output, success, err := s.executor.Execute(response.Execution.ID, response.Execution.FloID, "execution.flow", "", response.Flow.EnvironmentID, logCallback)
+	output, success, err := s.executor.Execute(response.Execution.ID, response.Execution.FloID, "execution.flow", "", response.Flow.EnvironmentID, triggerDataPath, logCallback)
 	if err != nil || !success {
 		hasErrored = true
 	}

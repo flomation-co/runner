@@ -83,7 +83,7 @@ func (s *Service) Version() (*string, error) {
 	return &output, nil
 }
 
-func (s *Service) Execute(id string, flow string, path string, entry string, environment *string, onLog LogCallback) (*string, bool, error) {
+func (s *Service) Execute(id string, flow string, path string, entry string, environment *string, triggerData string, onLog LogCallback) (*string, bool, error) {
 	args := []string{
 		"--output",
 		"json",
@@ -104,6 +104,11 @@ func (s *Service) Execute(id string, flow string, path string, entry string, env
 	if environment != nil {
 		args = append(args, "--environment")
 		args = append(args, *environment)
+	}
+
+	if triggerData != "" {
+		args = append(args, "--trigger-data")
+		args = append(args, triggerData)
 	}
 
 	if s.config.RunnerConfig.CertificateFilename != "" {
