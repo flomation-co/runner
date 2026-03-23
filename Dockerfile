@@ -5,7 +5,8 @@ FROM dhi.io/alpine-base:3.23-alpine3.23-dev
 RUN apk add --no-cache \
      ca-certificates \
      jq \
-     procps
+     procps\
+     clamav
 
 # Create flomation user and group
 RUN addgroup -S flomation && adduser -S flomation -G flomation &&\
