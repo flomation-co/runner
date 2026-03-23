@@ -417,7 +417,7 @@ func (s *Service) checkForExecutions() error {
 		log.WithFields(log.Fields{"error": err}).Error("unable to open execution directory root")
 		return err
 	}
-	defer stateRoot.Close()
+	defer func() { _ = stateRoot.Close() }()
 	stateRelPath := filepath.Join(response.Execution.FloID, response.Execution.ID, "state.json")
 	sb, err := stateRoot.ReadFile(stateRelPath)
 	if err != nil {
