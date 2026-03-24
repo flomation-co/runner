@@ -437,9 +437,14 @@ func (s *Service) checkForExecutions() error {
 		}
 	}
 
+	entryNode := ""
+	if response.Execution.EntryNodeID != nil {
+		entryNode = *response.Execution.EntryNodeID
+	}
+
 	hasErrored := false
 	logCallback := s.createLogCallback(response.Execution.ID)
-	output, success, err := s.executor.Execute(response.Execution.ID, response.Execution.FloID, "execution.flow", "", response.Flow.EnvironmentID, triggerDataPath, contextPath, logCallback)
+	output, success, err := s.executor.Execute(response.Execution.ID, response.Execution.FloID, "execution.flow", entryNode, response.Flow.EnvironmentID, triggerDataPath, contextPath, logCallback)
 	if err != nil || !success {
 		hasErrored = true
 	}
