@@ -69,6 +69,11 @@ func NewService(cfg *config.Config) (*Service, error) {
 		executor: executor.NewService(cfg),
 	}
 
+	// Ensure state directory exists before attempting to read or write state
+	if err := os.MkdirAll(cfg.ExecutionConfig.StateDirectory, 0750); err != nil {
+		return nil, err
+	}
+
 	rs, err := config.LoadState(cfg.ExecutionConfig.StateDirectory + FloStateFilename)
 	if err != nil {
 		return nil, err
