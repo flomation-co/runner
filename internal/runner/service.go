@@ -422,6 +422,7 @@ func (s *Service) checkForExecutions() error {
 			"trigger_type":    stringOrEmpty(response.Execution.TriggerType),
 			"author_email":    stringOrEmpty(response.Execution.AuthorEmail),
 			"triggerer_email": stringOrEmpty(response.Execution.TriggererEmail),
+			"api_url":         s.config.RunnerConfig.Server,
 		}
 
 		ctxBytes, err := json.Marshal(ctx)
