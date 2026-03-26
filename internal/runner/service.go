@@ -617,10 +617,10 @@ func (s *Service) pollForCancellation(ctx gocontext.Context, cancel gocontext.Ca
 				CompletionStatus string `json:"completion_status"`
 			}
 			if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
-				resp.Body.Close()
+				_ = resp.Body.Close()
 				continue
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close()
 
 			if status.CompletionStatus == "cancel" {
 				log.WithFields(log.Fields{
