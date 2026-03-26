@@ -2,6 +2,7 @@ package executor
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 
 	"flomation.app/automate/runner/internal/config"
 	log "github.com/sirupsen/logrus"
@@ -83,7 +85,7 @@ func (s *Service) Version() (*string, error) {
 	return &output, nil
 }
 
-func (s *Service) Execute(id string, flow string, path string, entry string, environment *string, triggerData string, contextFile string, onLog LogCallback) (*string, bool, error) {
+func (s *Service) Execute(ctx context.Context, id string, flow string, path string, entry string, environment *string, triggerData string, contextFile string, onLog LogCallback) (*string, bool, error) {
 	args := []string{
 		"--output",
 		"json",
@@ -147,8 +149,15 @@ func (s *Service) Execute(id string, flow string, path string, entry string, env
 	}
 
 	// #nosec G204 -- Parameters for Executor are intentional and controlled
-	cmd := exec.Command(executionParts[0], args...)
+	cmd := exec.CommandContext(ctx, executionParts[0], args...)
 	cmd.Dir = executionDirectory
+	// Send SIGTERM on context cancellation (not SIGKILL) so the executor can clean up
+	cmd.Cancel = func() error {
+		log.WithFields(log.Fields{
+			"id": id,
+		}).Info("Sending SIGTERM to executor process")
+		return cmd.Process.Signal(syscall.SIGTERM)
+	}
 
 	// Pipe stdout and stderr for real-time streaming
 	stdoutPipe, err := cmd.StdoutPipe()
@@ -191,6 +200,13 @@ func (s *Service) Execute(id string, flow string, path string, entry string, env
 
 	err = cmd.Wait()
 	output := strings.Join(allLines, "\n")
+
+	if ctx.Err() != nil {
+		log.WithFields(log.Fields{
+			"id": id,
+		}).Info("execution cancelled")
+		return &output, false, fmt.Errorf("execution cancelled")
+	}
 
 	if err != nil {
 		log.WithFields(log.Fields{
