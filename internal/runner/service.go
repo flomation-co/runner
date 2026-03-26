@@ -2,6 +2,7 @@ package runner
 
 import (
 	"bytes"
+	gocontext "context"
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
@@ -448,12 +449,24 @@ func (s *Service) checkForExecutions() error {
 		entryNode = *response.Execution.EntryNodeID
 	}
 
+	// Create a cancellable context for this execution
+	execCtx, execCancel := gocontext.WithCancel(gocontext.Background())
+	defer execCancel()
+
+	// Poll for cancellation in the background
+	go s.pollForCancellation(execCtx, execCancel, response.Execution.ID)
+
 	hasErrored := false
+	cancelled := false
 	logCallback := s.createLogCallback(response.Execution.ID)
-	output, success, err := s.executor.Execute(response.Execution.ID, response.Execution.FloID, "execution.flow", entryNode, response.Flow.EnvironmentID, triggerDataPath, contextPath, logCallback)
-	if err != nil || !success {
+	output, success, err := s.executor.Execute(execCtx, response.Execution.ID, response.Execution.FloID, "execution.flow", entryNode, response.Flow.EnvironmentID, triggerDataPath, contextPath, logCallback)
+	if execCtx.Err() != nil {
+		cancelled = true
+		hasErrored = true
+	} else if err != nil || !success {
 		hasErrored = true
 	}
+	_ = cancelled
 
 	// TODO: Give time for files to be written to disk
 	time.Sleep(time.Second * 5)
@@ -500,6 +513,7 @@ func (s *Service) checkForExecutions() error {
 	url := fmt.Sprintf("%v/api/v1/execution/%v", s.config.RunnerConfig.Server, response.Execution.ID)
 	executionResult := r.ExecutionResult{
 		HasErrored: hasErrored,
+		Cancelled:  cancelled,
 		State:      state,
 	}
 
@@ -562,6 +576,59 @@ func (s *Service) createLogCallback(executionID string) executor.LogCallback {
 				"error":        err,
 				"execution_id": executionID,
 			}).Warn("unable to stream log to API")
+		}
+	}
+}
+
+// pollForCancellation periodically checks the API to see if the execution
+// has been marked as cancelled. If so, it calls cancel() to stop the executor.
+func (s *Service) pollForCancellation(ctx gocontext.Context, cancel gocontext.CancelFunc, executionID string) {
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			url := fmt.Sprintf("%v/api/v1/execution/%v/status", s.config.RunnerConfig.Server, executionID)
+
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+			if err != nil {
+				continue
+			}
+
+			// Sign the request
+			body := []byte("{}")
+			hash := sha256.Sum256(body)
+			signature, err := rsa.SignPSS(rand.Reader, s.signing.PrivateKeyBytes, crypto.SHA256, hash[:], nil)
+			if err != nil {
+				continue
+			}
+			req.Header.Set("X-Flomation-Runner-Signature", hex.EncodeToString(signature))
+
+			client := http.Client{Timeout: 5 * time.Second}
+			resp, err := client.Do(req)
+			if err != nil {
+				continue
+			}
+
+			var status struct {
+				CompletionStatus string `json:"completion_status"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
+				_ = resp.Body.Close()
+				continue
+			}
+			_ = resp.Body.Close()
+
+			if status.CompletionStatus == "cancel" {
+				log.WithFields(log.Fields{
+					"execution_id": executionID,
+				}).Info("Execution cancellation detected, stopping executor")
+				cancel()
+				return
+			}
 		}
 	}
 }

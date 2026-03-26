@@ -48,5 +48,6 @@ type PendingExecution struct {
 
 type ExecutionResult struct {
 	HasErrored bool        `json:"has_errored"`
+	Cancelled  bool        `json:"cancelled,omitempty"`
 	State      interface{} `json:"state"`
 }
