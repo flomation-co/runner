@@ -273,7 +273,7 @@ func (s *Service) registerRunner() error {
 
 func (s *Service) checkForExecutions() error {
 	client := http.Client{
-		Timeout: time.Second * 15,
+		Timeout: time.Second * 35, // Must exceed API's 25s long-poll timeout
 	}
 
 	update := RunnerRequest{
@@ -638,18 +638,18 @@ func (s *Service) monitor() {
 
 	s.running = true
 	for {
-		if s.lastCheckIn == nil || time.Since(*s.lastCheckIn) > time.Duration(s.config.RunnerConfig.CheckInTimeout)*time.Second {
-			now := time.Now()
-			s.lastCheckIn = &now
+		now := time.Now()
+		s.lastCheckIn = &now
 
-			if err := s.checkForExecutions(); err != nil {
-				log.WithFields(log.Fields{
-					"error": err,
-				}).Error("unable to update runner contact")
-			}
+		if err := s.checkForExecutions(); err != nil {
+			log.WithFields(log.Fields{
+				"error": err,
+			}).Error("unable to check for executions")
+			// Back off on error to avoid tight-looping when API is unavailable
+			time.Sleep(time.Second * 5)
 		}
-
-		time.Sleep(time.Second * 1)
+		// No sleep on success — the API long-polls (holds the connection
+		// for up to 25s if no work is available), so we reconnect immediately.
 	}
 }
 
