@@ -273,7 +273,7 @@ func (s *Service) registerRunner() error {
 
 func (s *Service) checkForExecutions() error {
 	client := http.Client{
-		Timeout: time.Second * 15,
+		Timeout: time.Second * 35, // Must exceed API's 25s long-poll timeout
 	}
 
 	update := RunnerRequest{
@@ -417,6 +417,24 @@ func (s *Service) checkForExecutions() error {
 			return ""
 		}
 
+		// Resolve system_prompt: agent trigger data takes precedence, then flow settings
+		systemPrompt := stringOrEmpty(response.Flow.SystemPrompt)
+		// Agent's system prompt overrides flow settings
+		if response.Execution.Data != nil {
+			var triggerData map[string]interface{}
+			switch v := response.Execution.Data.(type) {
+			case string:
+				_ = json.Unmarshal([]byte(v), &triggerData)
+			default:
+				if raw, err := json.Marshal(v); err == nil {
+					_ = json.Unmarshal(raw, &triggerData)
+				}
+			}
+			if sp, ok := triggerData["system_prompt"].(string); ok {
+				systemPrompt = sp
+			}
+		}
+
 		ctx := map[string]interface{}{
 			"flow_id":         response.Execution.FloID,
 			"execution_id":    response.Execution.ID,
@@ -429,6 +447,7 @@ func (s *Service) checkForExecutions() error {
 			"author_email":    stringOrEmpty(response.Execution.AuthorEmail),
 			"triggerer_email": stringOrEmpty(response.Execution.TriggererEmail),
 			"api_url":         s.config.RunnerConfig.Server,
+			"system_prompt":   systemPrompt,
 		}
 
 		ctxBytes, err := json.Marshal(ctx)
@@ -638,18 +657,18 @@ func (s *Service) monitor() {
 
 	s.running = true
 	for {
-		if s.lastCheckIn == nil || time.Since(*s.lastCheckIn) > time.Duration(s.config.RunnerConfig.CheckInTimeout)*time.Second {
-			now := time.Now()
-			s.lastCheckIn = &now
+		now := time.Now()
+		s.lastCheckIn = &now
 
-			if err := s.checkForExecutions(); err != nil {
-				log.WithFields(log.Fields{
-					"error": err,
-				}).Error("unable to update runner contact")
-			}
+		if err := s.checkForExecutions(); err != nil {
+			log.WithFields(log.Fields{
+				"error": err,
+			}).Error("unable to check for executions")
+			// Back off on error to avoid tight-looping when API is unavailable
+			time.Sleep(time.Second * 5)
 		}
-
-		time.Sleep(time.Second * 1)
+		// No sleep on success — the API long-polls (holds the connection
+		// for up to 25s if no work is available), so we reconnect immediately.
 	}
 }
 

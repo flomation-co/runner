@@ -17,6 +17,7 @@ type Flo struct {
 	DurationAdditional *int64     `json:"duration_additional" db:"duration_additional"`
 	LastExecution      *Execution `json:"last_execution" db:"last_execution"`
 	EnvironmentID      *string    `json:"environment_id"`
+	SystemPrompt       *string    `json:"system_prompt,omitempty"`
 }
 
 type Execution struct {
