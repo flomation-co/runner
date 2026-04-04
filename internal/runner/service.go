@@ -417,6 +417,24 @@ func (s *Service) checkForExecutions() error {
 			return ""
 		}
 
+		// Resolve system_prompt: agent trigger data takes precedence, then flow settings
+		systemPrompt := stringOrEmpty(response.Flow.SystemPrompt)
+		// Agent's system prompt overrides flow settings
+		if response.Execution.Data != nil {
+			var triggerData map[string]interface{}
+			switch v := response.Execution.Data.(type) {
+			case string:
+				_ = json.Unmarshal([]byte(v), &triggerData)
+			default:
+				if raw, err := json.Marshal(v); err == nil {
+					_ = json.Unmarshal(raw, &triggerData)
+				}
+			}
+			if sp, ok := triggerData["system_prompt"].(string); ok {
+				systemPrompt = sp
+			}
+		}
+
 		ctx := map[string]interface{}{
 			"flow_id":         response.Execution.FloID,
 			"execution_id":    response.Execution.ID,
@@ -429,6 +447,7 @@ func (s *Service) checkForExecutions() error {
 			"author_email":    stringOrEmpty(response.Execution.AuthorEmail),
 			"triggerer_email": stringOrEmpty(response.Execution.TriggererEmail),
 			"api_url":         s.config.RunnerConfig.Server,
+			"system_prompt":   systemPrompt,
 		}
 
 		ctxBytes, err := json.Marshal(ctx)
