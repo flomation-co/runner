@@ -417,9 +417,19 @@ func (s *Service) checkForExecutions() error {
 			return ""
 		}
 
-		// Resolve system_prompt: agent trigger data takes precedence, then flow settings
+		// Resolve system_prompt, agent_id, agent_user_id, and
+		// conversation_id from trigger data. Agent trigger data takes
+		// precedence over flow settings for the system prompt. The agent
+		// memory identifiers are only populated for executions dispatched
+		// by the agent orchestration layer (Launch); for all other trigger
+		// types they stay empty, and downstream AI actions treat the
+		// absence as "not in an agent context" (skipping assistant-reply
+		// recording) or "not conversation-scoped" (skipping per-user
+		// memory lookups in Phase 2+).
 		systemPrompt := stringOrEmpty(response.Flow.SystemPrompt)
-		// Agent's system prompt overrides flow settings
+		agentID := ""
+		agentUserID := ""
+		conversationID := ""
 		if response.Execution.Data != nil {
 			var triggerData map[string]interface{}
 			switch v := response.Execution.Data.(type) {
@@ -432,6 +442,15 @@ func (s *Service) checkForExecutions() error {
 			}
 			if sp, ok := triggerData["system_prompt"].(string); ok {
 				systemPrompt = sp
+			}
+			if aid, ok := triggerData["agent_id"].(string); ok {
+				agentID = aid
+			}
+			if auid, ok := triggerData["agent_user_id"].(string); ok {
+				agentUserID = auid
+			}
+			if cid, ok := triggerData["conversation_id"].(string); ok {
+				conversationID = cid
 			}
 		}
 
@@ -448,6 +467,9 @@ func (s *Service) checkForExecutions() error {
 			"triggerer_email": stringOrEmpty(response.Execution.TriggererEmail),
 			"api_url":         s.config.RunnerConfig.Server,
 			"system_prompt":   systemPrompt,
+			"agent_id":        agentID,
+			"agent_user_id":   agentUserID,
+			"conversation_id": conversationID,
 		}
 
 		ctxBytes, err := json.Marshal(ctx)
