@@ -417,9 +417,14 @@ func (s *Service) checkForExecutions() error {
 			return ""
 		}
 
-		// Resolve system_prompt: agent trigger data takes precedence, then flow settings
+		// Resolve system_prompt and agent_id from trigger data. Agent trigger
+		// data takes precedence over flow settings for the system prompt.
+		// agent_id is only populated for executions dispatched by the agent
+		// orchestration layer (Launch); for all other trigger types it stays
+		// empty, and downstream AI actions treat the absence as "not in an
+		// agent context" and skip assistant-reply recording.
 		systemPrompt := stringOrEmpty(response.Flow.SystemPrompt)
-		// Agent's system prompt overrides flow settings
+		agentID := ""
 		if response.Execution.Data != nil {
 			var triggerData map[string]interface{}
 			switch v := response.Execution.Data.(type) {
@@ -432,6 +437,9 @@ func (s *Service) checkForExecutions() error {
 			}
 			if sp, ok := triggerData["system_prompt"].(string); ok {
 				systemPrompt = sp
+			}
+			if aid, ok := triggerData["agent_id"].(string); ok {
+				agentID = aid
 			}
 		}
 
@@ -448,6 +456,7 @@ func (s *Service) checkForExecutions() error {
 			"triggerer_email": stringOrEmpty(response.Execution.TriggererEmail),
 			"api_url":         s.config.RunnerConfig.Server,
 			"system_prompt":   systemPrompt,
+			"agent_id":        agentID,
 		}
 
 		ctxBytes, err := json.Marshal(ctx)
