@@ -116,7 +116,17 @@ func NewService(cfg *config.Config) (*Service, error) {
 		}).Error("error initialising runner contact")
 	}
 
-	go s.monitor()
+	workers := s.config.ExecutionConfig.MaxConcurrentExecutors
+	if workers <= 0 {
+		workers = 1
+	}
+	for i := int64(0); i < workers; i++ {
+		workerID := i + 1
+		go s.monitor(workerID)
+	}
+	log.WithFields(log.Fields{
+		"workers": workers,
+	}).Info("execution workers started")
 
 	return &s, nil
 }
@@ -428,6 +438,11 @@ func (s *Service) checkForExecutions() error {
 		// memory lookups in Phase 2+).
 		systemPrompt := stringOrEmpty(response.Flow.SystemPrompt)
 		agentID := ""
+		triggerSource := ""
+		channelType := ""
+		channelID := ""
+		threadID := ""
+		messageRole := ""
 		agentUserID := ""
 		conversationID := ""
 		if response.Execution.Data != nil {
@@ -452,6 +467,21 @@ func (s *Service) checkForExecutions() error {
 			if cid, ok := triggerData["conversation_id"].(string); ok {
 				conversationID = cid
 			}
+			if ts, ok := triggerData["trigger_source"].(string); ok {
+				triggerSource = ts
+			}
+			if ct, ok := triggerData["channel_type"].(string); ok {
+				channelType = ct
+			}
+			if ci, ok := triggerData["channel_id"].(string); ok {
+				channelID = ci
+			}
+			if ti, ok := triggerData["thread_id"].(string); ok {
+				threadID = ti
+			}
+			if r, ok := triggerData["role"].(string); ok {
+				messageRole = r
+			}
 		}
 
 		ctx := map[string]interface{}{
@@ -470,6 +500,12 @@ func (s *Service) checkForExecutions() error {
 			"agent_id":        agentID,
 			"agent_user_id":   agentUserID,
 			"conversation_id": conversationID,
+			"trigger_source":  triggerSource,
+			"channel_type":   channelType,
+			"channel_id":     channelID,
+			"thread_id":      threadID,
+			"role":           messageRole,
+			"system_flow":    response.Flow.SystemFlow,
 		}
 
 		ctxBytes, err := json.Marshal(ctx)
@@ -632,17 +668,19 @@ func (s *Service) pollForCancellation(ctx gocontext.Context, cancel gocontext.Ca
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			url := fmt.Sprintf("%v/api/v1/execution/%v/status", s.config.RunnerConfig.Server, executionID)
-
-			req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+			// Sign the execution ID for the GET request — uses the same
+			// X-Flomation-Runner-Signature header as POST requests.
+			// For GETs the API verifies the signature against the :id param.
+			idHash := sha256.Sum256([]byte(executionID))
+			signature, err := rsa.SignPSS(rand.Reader, s.signing.PrivateKeyBytes, crypto.SHA256, idHash[:], nil)
 			if err != nil {
 				continue
 			}
 
-			// Sign the request
-			body := []byte("{}")
-			hash := sha256.Sum256(body)
-			signature, err := rsa.SignPSS(rand.Reader, s.signing.PrivateKeyBytes, crypto.SHA256, hash[:], nil)
+			statusURL := fmt.Sprintf("%v/api/v1/execution/%v/status",
+				s.config.RunnerConfig.Server, executionID)
+
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, statusURL, nil)
 			if err != nil {
 				continue
 			}
@@ -674,9 +712,7 @@ func (s *Service) pollForCancellation(ctx gocontext.Context, cancel gocontext.Ca
 	}
 }
 
-func (s *Service) monitor() {
-	// TODO: Run multiple monitors up to max parallel executors
-
+func (s *Service) monitor(workerID int64) {
 	s.running = true
 	for {
 		now := time.Now()
@@ -684,7 +720,8 @@ func (s *Service) monitor() {
 
 		if err := s.checkForExecutions(); err != nil {
 			log.WithFields(log.Fields{
-				"error": err,
+				"error":  err,
+				"worker": workerID,
 			}).Error("unable to check for executions")
 			// Back off on error to avoid tight-looping when API is unavailable
 			time.Sleep(time.Second * 5)
