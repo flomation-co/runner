@@ -116,7 +116,17 @@ func NewService(cfg *config.Config) (*Service, error) {
 		}).Error("error initialising runner contact")
 	}
 
-	go s.monitor()
+	workers := s.config.ExecutionConfig.MaxConcurrentExecutors
+	if workers <= 0 {
+		workers = 1
+	}
+	for i := int64(0); i < workers; i++ {
+		workerID := i + 1
+		go s.monitor(workerID)
+	}
+	log.WithFields(log.Fields{
+		"workers": workers,
+	}).Info("execution workers started")
 
 	return &s, nil
 }
@@ -428,6 +438,11 @@ func (s *Service) checkForExecutions() error {
 		// memory lookups in Phase 2+).
 		systemPrompt := stringOrEmpty(response.Flow.SystemPrompt)
 		agentID := ""
+		triggerSource := ""
+		channelType := ""
+		channelID := ""
+		threadID := ""
+		messageRole := ""
 		agentUserID := ""
 		conversationID := ""
 		if response.Execution.Data != nil {
@@ -452,6 +467,21 @@ func (s *Service) checkForExecutions() error {
 			if cid, ok := triggerData["conversation_id"].(string); ok {
 				conversationID = cid
 			}
+			if ts, ok := triggerData["trigger_source"].(string); ok {
+				triggerSource = ts
+			}
+			if ct, ok := triggerData["channel_type"].(string); ok {
+				channelType = ct
+			}
+			if ci, ok := triggerData["channel_id"].(string); ok {
+				channelID = ci
+			}
+			if ti, ok := triggerData["thread_id"].(string); ok {
+				threadID = ti
+			}
+			if r, ok := triggerData["role"].(string); ok {
+				messageRole = r
+			}
 		}
 
 		ctx := map[string]interface{}{
@@ -470,6 +500,12 @@ func (s *Service) checkForExecutions() error {
 			"agent_id":        agentID,
 			"agent_user_id":   agentUserID,
 			"conversation_id": conversationID,
+			"trigger_source":  triggerSource,
+			"channel_type":   channelType,
+			"channel_id":     channelID,
+			"thread_id":      threadID,
+			"role":           messageRole,
+			"system_flow":    response.Flow.SystemFlow,
 		}
 
 		ctxBytes, err := json.Marshal(ctx)
@@ -674,9 +710,7 @@ func (s *Service) pollForCancellation(ctx gocontext.Context, cancel gocontext.Ca
 	}
 }
 
-func (s *Service) monitor() {
-	// TODO: Run multiple monitors up to max parallel executors
-
+func (s *Service) monitor(workerID int64) {
 	s.running = true
 	for {
 		now := time.Now()
@@ -684,7 +718,8 @@ func (s *Service) monitor() {
 
 		if err := s.checkForExecutions(); err != nil {
 			log.WithFields(log.Fields{
-				"error": err,
+				"error":  err,
+				"worker": workerID,
 			}).Error("unable to check for executions")
 			// Back off on error to avoid tight-looping when API is unavailable
 			time.Sleep(time.Second * 5)

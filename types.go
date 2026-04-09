@@ -18,6 +18,7 @@ type Flo struct {
 	LastExecution      *Execution `json:"last_execution" db:"last_execution"`
 	EnvironmentID      *string    `json:"environment_id"`
 	SystemPrompt       *string    `json:"system_prompt,omitempty"`
+	SystemFlow         bool       `json:"system_flow,omitempty"`
 }
 
 type Execution struct {
