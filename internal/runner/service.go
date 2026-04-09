@@ -668,17 +668,19 @@ func (s *Service) pollForCancellation(ctx gocontext.Context, cancel gocontext.Ca
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			url := fmt.Sprintf("%v/api/v1/execution/%v/status", s.config.RunnerConfig.Server, executionID)
-
-			req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+			// Sign the execution ID for the GET request — uses the same
+			// X-Flomation-Runner-Signature header as POST requests.
+			// For GETs the API verifies the signature against the :id param.
+			idHash := sha256.Sum256([]byte(executionID))
+			signature, err := rsa.SignPSS(rand.Reader, s.signing.PrivateKeyBytes, crypto.SHA256, idHash[:], nil)
 			if err != nil {
 				continue
 			}
 
-			// Sign the request
-			body := []byte("{}")
-			hash := sha256.Sum256(body)
-			signature, err := rsa.SignPSS(rand.Reader, s.signing.PrivateKeyBytes, crypto.SHA256, hash[:], nil)
+			statusURL := fmt.Sprintf("%v/api/v1/execution/%v/status",
+				s.config.RunnerConfig.Server, executionID)
+
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, statusURL, nil)
 			if err != nil {
 				continue
 			}
