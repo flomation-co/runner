@@ -180,6 +180,10 @@ func (s *Service) Execute(ctx context.Context, id string, flow string, path stri
 
 	readPipe := func(pipe io.ReadCloser) {
 		scanner := bufio.NewScanner(pipe)
+		// Increase buffer to 1MB to handle large node events (e.g. with
+		// base64 audio data). Default 64KB causes "token too long" errors
+		// which silently stop reading the pipe and deadlock the executor.
+		scanner.Buffer(make([]byte, 0, 1<<20), 1<<20)
 		for scanner.Scan() {
 			line := scanner.Text()
 			mu.Lock()
