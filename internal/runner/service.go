@@ -484,6 +484,11 @@ func (s *Service) checkForExecutions() error {
 			}
 		}
 
+		apiURL := s.config.RunnerConfig.Server
+		if s.config.TLS != nil && s.config.TLS.Enabled && s.config.TLS.APIURL != "" {
+			apiURL = s.config.TLS.APIURL
+		}
+
 		ctx := map[string]interface{}{
 			"flow_id":         response.Execution.FloID,
 			"execution_id":    response.Execution.ID,
@@ -495,7 +500,7 @@ func (s *Service) checkForExecutions() error {
 			"trigger_type":    stringOrEmpty(response.Execution.TriggerType),
 			"author_email":    stringOrEmpty(response.Execution.AuthorEmail),
 			"triggerer_email": stringOrEmpty(response.Execution.TriggererEmail),
-			"api_url":         s.config.RunnerConfig.Server,
+			"api_url":         apiURL,
 			"system_prompt":   systemPrompt,
 			"agent_id":        agentID,
 			"agent_user_id":   agentUserID,
@@ -506,6 +511,12 @@ func (s *Service) checkForExecutions() error {
 			"thread_id":      threadID,
 			"role":           messageRole,
 			"system_flow":    response.Flow.SystemFlow,
+		}
+
+		if s.config.TLS != nil && s.config.TLS.Enabled {
+			ctx["tls_ca_cert"] = s.config.TLS.CACertFile
+			ctx["tls_cert"] = s.config.TLS.CertFile
+			ctx["tls_key"] = s.config.TLS.KeyFile
 		}
 
 		ctxBytes, err := json.Marshal(ctx)
