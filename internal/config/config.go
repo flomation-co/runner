@@ -44,9 +44,18 @@ type ExecutionConfig struct {
 	ExecutableName         string `json:"executable_name" env:"FLOMATION_RUNNER_EXECUTABLE_NAME" arg:"executable_name"`
 }
 
+type TLSConfig struct {
+	Enabled    bool   `json:"enabled" env:"MTLS_ENABLED" arg:"mtls-enabled"`
+	CACertFile string `json:"ca_cert" env:"MTLS_CA_CERT" arg:"mtls-ca-cert"`
+	CertFile   string `json:"cert" env:"MTLS_CERT" arg:"mtls-cert"`
+	KeyFile    string `json:"key" env:"MTLS_KEY" arg:"mtls-key"`
+	APIURL     string `json:"api_url" env:"MTLS_API_URL" arg:"mtls-api-url"`
+}
+
 type Config struct {
 	RunnerConfig    RunnerConfig    `json:"runner"`
 	ExecutionConfig ExecutionConfig `json:"execution"`
+	TLS             *TLSConfig      `json:"tls,omitempty"`
 }
 
 func LoadConfig(path string) (*Config, error) {
