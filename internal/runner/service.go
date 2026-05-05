@@ -506,11 +506,11 @@ func (s *Service) checkForExecutions() error {
 			"agent_user_id":   agentUserID,
 			"conversation_id": conversationID,
 			"trigger_source":  triggerSource,
-			"channel_type":   channelType,
-			"channel_id":     channelID,
-			"thread_id":      threadID,
-			"role":           messageRole,
-			"system_flow":    response.Flow.SystemFlow,
+			"channel_type":    channelType,
+			"channel_id":      channelID,
+			"thread_id":       threadID,
+			"role":            messageRole,
+			"system_flow":     response.Flow.SystemFlow,
 		}
 
 		if s.config.TLS != nil && s.config.TLS.Enabled {
