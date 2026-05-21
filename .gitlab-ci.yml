@@ -70,7 +70,6 @@ build-rpm-8:
   extends: .build-rpm-template
   only:
     - main
-  image: rockylinux/rockylinux:8
   variables:
     EL_VERSION: "8"
     CI_TEMPLATES_REF: "main"
@@ -88,7 +87,6 @@ build-rpm-9:
   extends: .build-rpm-template
   only:
     - main
-  image: rockylinux/rockylinux:9
   variables:
     EL_VERSION: "9"
     CI_TEMPLATES_REF: "main"
@@ -106,7 +104,6 @@ build-rpm-8-arm64:
   extends: .build-rpm-template
   only:
     - main
-  image: rockylinux/rockylinux:8
   variables:
     EL_VERSION: "8"
     CI_TEMPLATES_REF: "main"
@@ -124,7 +121,6 @@ build-rpm-9-arm64:
   extends: .build-rpm-template
   only:
     - main
-  image: rockylinux/rockylinux:9
   variables:
     EL_VERSION: "9"
     CI_TEMPLATES_REF: "main"
