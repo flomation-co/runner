@@ -445,6 +445,7 @@ func (s *Service) checkForExecutions() error {
 		messageRole := ""
 		agentUserID := ""
 		conversationID := ""
+		pageAccessToken := ""
 		if response.Execution.Data != nil {
 			var triggerData map[string]interface{}
 			switch v := response.Execution.Data.(type) {
@@ -482,6 +483,9 @@ func (s *Service) checkForExecutions() error {
 			if r, ok := triggerData["role"].(string); ok {
 				messageRole = r
 			}
+			if pat, ok := triggerData["page_access_token"].(string); ok {
+				pageAccessToken = pat
+			}
 		}
 
 		apiURL := s.config.RunnerConfig.Server
@@ -509,8 +513,9 @@ func (s *Service) checkForExecutions() error {
 			"channel_type":    channelType,
 			"channel_id":      channelID,
 			"thread_id":       threadID,
-			"role":            messageRole,
-			"system_flow":     response.Flow.SystemFlow,
+			"role":               messageRole,
+			"page_access_token": pageAccessToken,
+			"system_flow":       response.Flow.SystemFlow,
 		}
 
 		if s.config.TLS != nil && s.config.TLS.Enabled {
