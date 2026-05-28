@@ -10,8 +10,6 @@ import (
 func Test_LoadConfig(t *testing.T) {
 	RegisterTestingT(t)
 
-	// goconfig restricts file access to prevent path traversal,
-	// so config files must be relative to the working directory.
 	configJSON := `{
 		"runner": {
 			"url": "https://api.example.com",
@@ -28,7 +26,7 @@ func Test_LoadConfig(t *testing.T) {
 
 	err := os.WriteFile("test-config.json", []byte(configJSON), 0600)
 	Expect(err).To(BeNil())
-	defer os.Remove("test-config.json")
+	defer func() { _ = os.Remove("test-config.json") }()
 
 	cfg, err := LoadConfig("test-config.json")
 	Expect(err).To(BeNil())
@@ -51,7 +49,7 @@ func Test_LoadConfigNotJSON(t *testing.T) {
 
 	err := os.WriteFile("not-json-config.json", []byte("this is not json"), 0600)
 	Expect(err).To(BeNil())
-	defer os.Remove("not-json-config.json")
+	defer func() { _ = os.Remove("not-json-config.json") }()
 
 	cfg, err := LoadConfig("not-json-config.json")
 	Expect(err).To(Not(BeNil()))
@@ -71,7 +69,7 @@ func Test_LoadConfigDefaults(t *testing.T) {
 
 	err := os.WriteFile("test-config-defaults.json", []byte(configJSON), 0600)
 	Expect(err).To(BeNil())
-	defer os.Remove("test-config-defaults.json")
+	defer func() { _ = os.Remove("test-config-defaults.json") }()
 
 	cfg, err := LoadConfig("test-config-defaults.json")
 	Expect(err).To(BeNil())
@@ -87,11 +85,11 @@ func Test_LoadState(t *testing.T) {
 
 	tmpFile, err := os.CreateTemp("", "test-state-*.json")
 	Expect(err).To(BeNil())
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	_, err = tmpFile.WriteString(stateJSON)
 	Expect(err).To(BeNil())
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	state, err := LoadState(tmpFile.Name())
 	Expect(err).To(BeNil())
@@ -110,14 +108,11 @@ func Test_LoadStateBadPath(t *testing.T) {
 func Test_LoadStateAbsolutePath(t *testing.T) {
 	RegisterTestingT(t)
 
-	// Regression test: absolute paths must work correctly.
-	// Previously filepath.Join(".", filepath.Clean(path)) converted
-	// absolute paths to relative, causing state to never be found.
 	stateJSON := `{"identifier": "abs-path-runner"}`
 
 	tmpDir, err := os.MkdirTemp("", "test-state-dir-*")
 	Expect(err).To(BeNil())
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	absPath := tmpDir + "/flo.state"
 	err = os.WriteFile(absPath, []byte(stateJSON), 0600)
