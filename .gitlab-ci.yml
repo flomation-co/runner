@@ -27,7 +27,6 @@ variables:
   AWS_SECRET_ACCESS_KEY: ${GITLAB_AWS_USER_SECRET}
   AWS_DEFAULT_REGION: eu-west-2
   DEPLOY_BUCKET: ${AWS_DEPLOYMENT_BUCKET}
-  HARBOR_IMAGE_PATH: ${HARBOR_REGISTRY}/${HARBOR_PROJECT}/${IMAGE_NAME}
   CI_TEMPLATES_PROJECT: flomation/infrastructure/ci-templates
 
 inject-metadata:
@@ -486,14 +485,6 @@ docker-prepare:
     paths:
       - ./dist/*flomation*amd64-linux*
     expire_in: 1 hour
-
-build-docker-harbor:
-  extends: .build-docker-dhi-harbor-buildx-template
-  variables:
-    BINARY_FILE_PATTERN: "dist/flomation-*-amd64-linux-*"
-  needs:
-    - inject-metadata
-    - docker-prepare
 
 build-docker:
   extends: .build-docker-dhi-buildx-template
