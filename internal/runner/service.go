@@ -549,10 +549,23 @@ func (s *Service) checkForExecutions() error {
 	// Poll for cancellation in the background
 	go s.pollForCancellation(execCtx, execCancel, response.Execution.ID)
 
+	// Write checkpoint file for resumed executions
+	checkpointPath := ""
+	if response.Checkpoint != nil {
+		execDir := fmt.Sprintf("%v/%v/%v", s.config.ExecutionConfig.ExecutionDirectory, response.Execution.FloID, response.Execution.ID)
+		cpPath := filepath.Join(execDir, "checkpoint.json")
+		if err := os.WriteFile(cpPath, *response.Checkpoint, 0600); err != nil {
+			log.WithError(err).Error("unable to write checkpoint file")
+		} else {
+			checkpointPath = "checkpoint.json"
+			log.Info("checkpoint written for resumed execution")
+		}
+	}
+
 	hasErrored := false
 	cancelled := false
 	logCallback := s.createLogCallback(response.Execution.ID)
-	output, success, err := s.executor.Execute(execCtx, response.Execution.ID, response.Execution.FloID, "execution.flow", entryNode, response.Flow.EnvironmentID, triggerDataPath, contextPath, logCallback)
+	output, success, err := s.executor.Execute(execCtx, response.Execution.ID, response.Execution.FloID, "execution.flow", entryNode, response.Flow.EnvironmentID, triggerDataPath, contextPath, checkpointPath, logCallback)
 	if execCtx.Err() != nil {
 		cancelled = true
 		hasErrored = true
@@ -595,9 +608,22 @@ func (s *Service) checkForExecutions() error {
 				"output": output,
 			}
 		} else if status, ok := state["status"]; ok {
-			if s, ok := status.(float64); ok && s != 0 {
-				hasErrored = true
+			if s, ok := status.(float64); ok {
+				if s == 3 {
+					// Suspended — not an error
+				} else if s != 0 {
+					hasErrored = true
+				}
 			}
+		}
+	}
+
+	// Detect suspended execution
+	isSuspended := false
+	if status, ok := state["status"]; ok {
+		if s, ok := status.(float64); ok && s == 3 {
+			isSuspended = true
+			hasErrored = false
 		}
 	}
 
@@ -607,6 +633,7 @@ func (s *Service) checkForExecutions() error {
 	executionResult := r.ExecutionResult{
 		HasErrored: hasErrored,
 		Cancelled:  cancelled,
+		Suspended:  isSuspended,
 		State:      state,
 	}
 

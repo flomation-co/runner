@@ -1,6 +1,9 @@
 package runner
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 type Flo struct {
 	ID                 string     `json:"id" db:"id"`
@@ -43,13 +46,15 @@ type Execution struct {
 }
 
 type PendingExecution struct {
-	Flow      Flo         `json:"flo"`
-	Execution Execution   `json:"execution"`
-	Data      interface{} `json:"data"`
+	Flow       Flo              `json:"flo"`
+	Execution  Execution        `json:"execution"`
+	Data       interface{}      `json:"data"`
+	Checkpoint *json.RawMessage `json:"checkpoint,omitempty"`
 }
 
 type ExecutionResult struct {
 	HasErrored bool        `json:"has_errored"`
 	Cancelled  bool        `json:"cancelled,omitempty"`
+	Suspended  bool        `json:"suspended,omitempty"`
 	State      interface{} `json:"state"`
 }
