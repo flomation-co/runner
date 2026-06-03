@@ -185,6 +185,7 @@ build-deb-arm64:
   extends: .build-deb-template
   only:
     - main
+  when: manual
   variables:
     CI_TEMPLATES_REF: "main"
     APPLICATION_BINARY: "${PACKAGE_NAME}-arm64-linux*"
@@ -201,6 +202,7 @@ build-msi:
   extends: .build-msi-template
   only:
     - main
+  when: manual
   variables:
     CI_TEMPLATES_REF: "main"
     APPLICATION_BINARY: "${PACKAGE_NAME}-amd64-windows*"
