@@ -85,7 +85,7 @@ func (s *Service) Version() (*string, error) {
 	return &output, nil
 }
 
-func (s *Service) Execute(ctx context.Context, id string, flow string, path string, entry string, environment *string, triggerData string, contextFile string, onLog LogCallback) (*string, bool, error) {
+func (s *Service) Execute(ctx context.Context, id string, flow string, path string, entry string, environment *string, triggerData string, contextFile string, checkpointFile string, onLog LogCallback) (*string, bool, error) {
 	args := []string{
 		"--output",
 		"json",
@@ -116,6 +116,11 @@ func (s *Service) Execute(ctx context.Context, id string, flow string, path stri
 	if contextFile != "" {
 		args = append(args, "--context")
 		args = append(args, contextFile)
+	}
+
+	if checkpointFile != "" {
+		args = append(args, "--checkpoint")
+		args = append(args, checkpointFile)
 	}
 
 	if s.config.RunnerConfig.CertificateFilename != "" {
