@@ -13,7 +13,7 @@ type RunnerState struct {
 }
 
 func LoadState(path string) (*RunnerState, error) {
-	filePath := filepath.Join(".", filepath.Clean(path))
+	filePath := filepath.Clean(path)
 	b, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, nil
@@ -61,9 +61,9 @@ type Config struct {
 func LoadConfig(path string) (*Config, error) {
 	var c Config
 
-	filePath := filepath.Join(".", filepath.Clean(path))
+	filePath := filepath.Clean(path)
 	if err := goconfig.Load(&c, goconfig.String(filePath)); err != nil {
-		return &c, nil
+		return nil, err
 	}
 
 	if c.ExecutionConfig.StateDirectory == "" {

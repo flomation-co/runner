@@ -109,11 +109,34 @@ func NewService(cfg *config.Config) (*Service, error) {
 		}).Error("unable to generate runner private key")
 	}
 
-	if err := s.registerRunner(); err != nil {
-		log.WithFields(log.Fields{
-			"error": err,
-			"api":   s.config.RunnerConfig.Server,
-		}).Error("error initialising runner contact")
+	// Retry registration with exponential backoff — the API may not be ready
+	// yet if all services start simultaneously on the same VM.
+	maxRetries := 10
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		if err := s.registerRunner(); err != nil {
+			log.WithFields(log.Fields{
+				"error":   err,
+				"api":     s.config.RunnerConfig.Server,
+				"attempt": attempt,
+			}).Warn("unable to register runner, retrying")
+
+			if attempt < maxRetries {
+				backoff := time.Duration(attempt*attempt) * time.Second
+				if backoff > 30*time.Second {
+					backoff = 30 * time.Second
+				}
+				time.Sleep(backoff)
+				continue
+			}
+
+			log.WithFields(log.Fields{
+				"error": err,
+				"api":   s.config.RunnerConfig.Server,
+			}).Error("unable to register runner after maximum retries")
+		} else {
+			log.Info("runner registered successfully")
+			break
+		}
 	}
 
 	workers := s.config.ExecutionConfig.MaxConcurrentExecutors
