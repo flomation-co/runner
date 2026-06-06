@@ -467,6 +467,8 @@ func (s *Service) checkForExecutions() error {
 		threadID := ""
 		messageRole := ""
 		agentUserID := ""
+		userID := ""
+		var identities []interface{}
 		conversationID := ""
 		pageAccessToken := ""
 		if response.Execution.Data != nil {
@@ -487,6 +489,17 @@ func (s *Service) checkForExecutions() error {
 			}
 			if auid, ok := triggerData["agent_user_id"].(string); ok {
 				agentUserID = auid
+			}
+			// R2.3: platform user_id (declared owner or anonymous stub)
+			// and the executing user's declared channel identities.
+			// Populated by the API's inbound pipeline for agent messages
+			// and by the API's runner pickup handler for manual /
+			// scheduled executions (the author's identities snapshot).
+			if uid, ok := triggerData["user_id"].(string); ok {
+				userID = uid
+			}
+			if ids, ok := triggerData["identities"].([]interface{}); ok {
+				identities = ids
 			}
 			if cid, ok := triggerData["conversation_id"].(string); ok {
 				conversationID = cid
@@ -531,6 +544,8 @@ func (s *Service) checkForExecutions() error {
 			"system_prompt":   systemPrompt,
 			"agent_id":        agentID,
 			"agent_user_id":   agentUserID,
+			"user_id":         userID,
+			"identities":      identities,
 			"conversation_id": conversationID,
 			"trigger_source":  triggerSource,
 			"channel_type":    channelType,
