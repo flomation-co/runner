@@ -469,6 +469,7 @@ func (s *Service) checkForExecutions() error {
 		agentUserID := ""
 		userID := ""
 		var identities []interface{}
+		var userVariables map[string]interface{}
 		conversationID := ""
 		pageAccessToken := ""
 		if response.Execution.Data != nil {
@@ -500,6 +501,14 @@ func (s *Service) checkForExecutions() error {
 			}
 			if ids, ok := triggerData["identities"].([]interface{}); ok {
 				identities = ids
+			}
+			// Extended ${user.X} profile snapshot. The API's
+			// enrichDataWithUserVariables populates this from the
+			// executing user's profile row at trigger pickup time —
+			// includes raw fields plus pre-composed full_name and
+			// full_address.
+			if uv, ok := triggerData["user_variables"].(map[string]interface{}); ok {
+				userVariables = uv
 			}
 			if cid, ok := triggerData["conversation_id"].(string); ok {
 				conversationID = cid
@@ -546,6 +555,7 @@ func (s *Service) checkForExecutions() error {
 			"agent_user_id":   agentUserID,
 			"user_id":         userID,
 			"identities":      identities,
+			"user_variables":  userVariables,
 			"conversation_id": conversationID,
 			"trigger_source":  triggerSource,
 			"channel_type":    channelType,
