@@ -1,10 +1,30 @@
 # Flomation Runner
 
-Long-running agent that polls the Flomation API for pending workflow executions and delegates them to the executor binary.
+> Remote agent — polls the API for pending executions and runs them.
+
+## The Flomation Automate platform
+
+Flomation Automate lets non-technical, front-of-house users build and run automation
+workflows ("flos") from a visual editor. This repository is one of five services that
+make up the platform:
+
+| Service | Role |
+|---------|------|
+| [API](https://gitlab.tooling.flomation.app/flomation/automate/api) | Backend REST API — manages flos, executions, runners, and environments/secrets |
+| [Editor](https://gitlab.tooling.flomation.app/flomation/automate/editor) | Visual web app for building, running, and monitoring flos |
+| [Launch](https://gitlab.tooling.flomation.app/flomation/automate/launch) | Ingress service — turns external events (webhooks, QR scans, forms, pixels) into trigger fires |
+| **Runner** (this repository) | Remote agent — polls the API for pending executions and runs them |
+| [Executor](https://gitlab.tooling.flomation.app/flomation/automate/executor) | Runtime engine — executes a flo's node graph and reports results |
 
 ## Overview
 
-The Flomation Runner is the remote execution agent for the Flomation Automate platform. It registers itself with the Flomation API, generates RSA keys for request signing, then continuously polls for pending workflow executions. When work is available, it writes the flow definition to disk, invokes the executor binary as a subprocess, and reports results back to the API. It supports both Kubernetes (ConfigMap) and Docker (environment variable) deployment modes.
+The Flomation Runner is the remote execution agent for the Flomation Automate platform.
+It registers itself with the [API](https://gitlab.tooling.flomation.app/flomation/automate/api),
+generates RSA keys for request signing, then continuously polls for pending workflow
+executions. When work is available, it writes the flow definition to disk, invokes the
+[Executor](https://gitlab.tooling.flomation.app/flomation/automate/executor) binary as a
+subprocess, and reports results back to the API. It supports both Kubernetes (ConfigMap)
+and Docker (environment variable) deployment modes.
 
 ## Prerequisites
 
@@ -21,22 +41,13 @@ The Flomation Runner is the remote execution agent for the Flomation Automate pl
 make build
 ```
 
-Produces binaries under `dist/` for linux/amd64, linux/arm64, linux/arm, darwin/amd64, darwin/arm64, and windows/amd64.
-
-**Docker:**
-
-```sh
-docker build \
-  --build-arg BINARY_FILE=dist/flomation-executor-amd64-linux-1.0.local \
-  --build-arg BINARY_FILE_2=dist/flomation-runner-amd64-linux-1.0.local \
-  -t flomation-runner .
-```
-
-Base image: `dhi.io/alpine-base:3.23-alpine3.23-dev`. Runs as non-root `flomation` user. Includes a health check via `pgrep`.
+Produces binaries under `dist/` for linux/amd64, linux/arm64, linux/arm, darwin/amd64,
+darwin/arm64, and windows/amd64.
 
 ## Configuration
 
-The runner loads configuration from `config.json`. In Docker mode, the entrypoint script generates this file from environment variables.
+The runner loads configuration from `config.json`. In Docker mode, the entrypoint script
+generates this file from environment variables.
 
 **Config file structure (`config.json`):**
 
@@ -91,6 +102,15 @@ The runner loads configuration from `config.json`. In Docker mode, the entrypoin
 
 ## Usage
 
+**Run the binary directly:**
+
+```sh
+./flomation-runner
+```
+
+The runner reads `config.json` from the current directory, registers with the API, and
+begins polling for executions.
+
 **Run with Docker (environment variables):**
 
 ```sh
@@ -103,31 +123,34 @@ docker run \
 
 **Run with Kubernetes (ConfigMap):**
 
-Mount `config.json` at `/usr/local/bin/config.json` via a ConfigMap. The entrypoint detects the file and uses it directly.
-
-**Run the binary directly:**
-
-```sh
-./flomation-runner
-```
-
-The runner reads `config.json` from the current directory, registers with the API, and begins polling for executions.
+Mount `config.json` at `/usr/local/bin/config.json` via a ConfigMap. The entrypoint
+detects the file and uses it directly.
 
 ## Development
 
-**Run tests:**
-
 ```sh
+# Run tests
 make test
+
+# Lint (runs goimports, golangci-lint, go vet, gosec, govulncheck)
+make lint
+
+# Build for all platforms (linux, darwin, windows — amd64/arm64/arm)
+make build
 ```
 
-**Lint:**
+## Docker
+
+Base image: `dhi.io/alpine-base:3.23-alpine3.23-dev`. Runs as a non-root `flomation`
+user. Includes a health check via `pgrep`. The image bundles both the runner and the
+executor binary:
 
 ```sh
-make lint
+docker build \
+  --build-arg BINARY_FILE=dist/flomation-executor-amd64-linux-1.0.local \
+  --build-arg BINARY_FILE_2=dist/flomation-runner-amd64-linux-1.0.local \
+  -t flomation-runner .
 ```
-
-Runs `goimports`, `golangci-lint`, `go vet`, `gosec`, and `govulncheck`.
 
 ## Project Structure
 
