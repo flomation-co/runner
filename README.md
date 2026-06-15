@@ -5,10 +5,10 @@
 ## Overview
 
 The Flomation Runner is the remote execution agent for the Flomation Automate platform.
-It registers itself with the [API](https://gitlab.tooling.flomation.app/flomation/automate/api),
+It registers itself with the API,
 generates RSA keys for request signing, then continuously polls for pending workflow
 executions. When work is available, it writes the flow definition to disk, invokes the
-[Executor](https://gitlab.tooling.flomation.app/flomation/automate/executor) binary as a
+Executor binary as a
 subprocess, and reports results back to the API. It supports both Kubernetes (ConfigMap)
 and Docker (environment variable) deployment modes.
 
