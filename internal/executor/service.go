@@ -184,13 +184,7 @@ func (s *Service) Execute(ctx context.Context, id string, flow string, path stri
 	var mu sync.Mutex
 
 	readPipe := func(pipe io.ReadCloser) {
-		scanner := bufio.NewScanner(pipe)
-		// Increase buffer to 1MB to handle large node events (e.g. with
-		// base64 audio data). Default 64KB causes "token too long" errors
-		// which silently stop reading the pipe and deadlock the executor.
-		scanner.Buffer(make([]byte, 0, 1<<20), 1<<20)
-		for scanner.Scan() {
-			line := scanner.Text()
+		drainPipe(pipe, maxStoredLineBytes, func(line string) {
 			mu.Lock()
 			allLines = append(allLines, line)
 			mu.Unlock()
@@ -198,7 +192,7 @@ func (s *Service) Execute(ctx context.Context, id string, flow string, path stri
 			if onLog != nil {
 				onLog([]string{line})
 			}
-		}
+		})
 	}
 
 	var wg sync.WaitGroup
@@ -227,4 +221,42 @@ func (s *Service) Execute(ctx context.Context, id string, flow string, path stri
 	}
 
 	return &output, cmd.ProcessState.Success(), nil
+}
+
+// maxStoredLineBytes caps how much of any single line the runner retains and
+// forwards. The executor already truncates large values in __NODE__ events, so
+// legitimate lines are small; this is defence in depth so a pathologically
+// large line can never blow up runner memory.
+const maxStoredLineBytes = 2 << 20 // 2MB
+
+// drainPipe reads pipe line by line, trims the trailing newline, retains at
+// most maxStoredLineBytes per line (0 = unbounded), and calls emit for each.
+//
+// It deliberately uses a bufio.Reader rather than a bufio.Scanner. A Scanner
+// has a fixed maximum token size and, when a single line exceeds it, returns
+// bufio.ErrTooLong and STOPS — silently leaving the pipe undrained, which
+// blocks the writer (the executor) forever on its next write and hangs the
+// execution. ReadString has no such ceiling: it always consumes the full
+// line, so the executor can never deadlock on the pipe regardless of how
+// large a single event is.
+func drainPipe(pipe io.Reader, maxStoredLineBytes int, emit func(line string)) {
+	reader := bufio.NewReader(pipe)
+	for {
+		line, err := reader.ReadString('\n')
+		if len(line) > 0 {
+			line = strings.TrimRight(line, "\n")
+			if maxStoredLineBytes > 0 && len(line) > maxStoredLineBytes {
+				line = line[:maxStoredLineBytes] + "… [runner-truncated]"
+			}
+			emit(line)
+		}
+		if err != nil {
+			if err != io.EOF {
+				log.WithFields(log.Fields{
+					"error": err,
+				}).Warn("error reading executor output pipe")
+			}
+			return
+		}
+	}
 }
