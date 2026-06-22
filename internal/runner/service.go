@@ -472,6 +472,7 @@ func (s *Service) checkForExecutions() error {
 		var userVariables map[string]interface{}
 		conversationID := ""
 		pageAccessToken := ""
+		planTaskID := ""
 		if response.Execution.Data != nil {
 			var triggerData map[string]interface{}
 			switch v := response.Execution.Data.(type) {
@@ -531,6 +532,13 @@ func (s *Service) checkForExecutions() error {
 			if pat, ok := triggerData["page_access_token"].(string); ok {
 				pageAccessToken = pat
 			}
+			// Agent Planning M1.5: orchestrator-dispatched plan tasks
+			// carry the plan_task_id in trigger data so the plan/block
+			// tool can address the right row via ${flow.plan_task_id}
+			// without the AI having to track the UUID across turns.
+			if pti, ok := triggerData["plan_task_id"].(string); ok {
+				planTaskID = pti
+			}
 		}
 
 		apiURL := s.config.RunnerConfig.Server
@@ -563,6 +571,7 @@ func (s *Service) checkForExecutions() error {
 			"thread_id":       threadID,
 			"role":               messageRole,
 			"page_access_token": pageAccessToken,
+			"plan_task_id":      planTaskID,
 			"system_flow":       response.Flow.SystemFlow,
 		}
 
