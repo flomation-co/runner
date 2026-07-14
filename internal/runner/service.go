@@ -63,6 +63,32 @@ type RunnerRequest struct {
 
 const FloStateFilename = "flo.state"
 
+// stateReadMaxAttempts / stateReadRetryInterval bound the read of the executor's
+// state.json after the process exits. The file is already durable by then, so the
+// first attempt normally succeeds; the retry only covers a rare fs-visibility lag
+// and caps at ~500ms (vs the old unconditional 5s sleep). Vars (not consts) so
+// tests can shrink them.
+var (
+	stateReadMaxAttempts   = 25
+	stateReadRetryInterval = 20 * time.Millisecond
+)
+
+// readStateWithRetry reads a file under root, retrying briefly to absorb a rare
+// filesystem-visibility lag after the executor process exits. Returns on the
+// first success; otherwise the last error after the bounded attempts.
+func readStateWithRetry(root *os.Root, relPath string) ([]byte, error) {
+	var b []byte
+	var err error
+	for attempt := 0; attempt < stateReadMaxAttempts; attempt++ {
+		b, err = root.ReadFile(relPath)
+		if err == nil {
+			return b, nil
+		}
+		time.Sleep(stateReadRetryInterval)
+	}
+	return b, err
+}
+
 func NewService(cfg *config.Config) (*Service, error) {
 	s := Service{
 		config:   cfg,
@@ -403,10 +429,16 @@ func (s *Service) checkForExecutions() error {
 
 	req.Header.Set("X-Flomation-Runner-Signature", hex.EncodeToString(signature))
 
-	_, err = client.Do(req)
-	if err != nil {
-		return err
-	}
+	// Fire the "running" state update asynchronously so it never blocks the
+	// executor spawn on the hot path. The atomic claim already set the DB status
+	// to 'running'; this POST only re-affirms it and emits the SSE "running"
+	// signal for the live execution view, so best-effort is fine.
+	stateReq := req
+	go func() {
+		if _, derr := client.Do(stateReq); derr != nil {
+			log.WithFields(log.Fields{"error": derr}).Warn("async running-state update failed")
+		}
+	}()
 
 	// Write trigger invocation data if present
 	var triggerDataPath string
@@ -547,29 +579,29 @@ func (s *Service) checkForExecutions() error {
 		}
 
 		ctx := map[string]interface{}{
-			"flow_id":         response.Execution.FloID,
-			"execution_id":    response.Execution.ID,
-			"sequence":        response.Execution.Sequence,
-			"author_id":       response.Execution.OwnerID,
-			"organisation_id": stringOrEmpty(response.Flow.OrganisationID),
-			"runner_id":       s.state.ID,
-			"start_time":      time.Now().UTC().Format(time.RFC3339),
-			"trigger_type":    stringOrEmpty(response.Execution.TriggerType),
-			"author_email":    stringOrEmpty(response.Execution.AuthorEmail),
-			"triggerer_email": stringOrEmpty(response.Execution.TriggererEmail),
-			"api_url":         apiURL,
-			"system_prompt":   systemPrompt,
-			"agent_id":        agentID,
-			"agent_user_id":   agentUserID,
-			"user_id":         userID,
-			"identities":      identities,
-			"user_variables":  userVariables,
-			"conversation_id": conversationID,
-			"trigger_source":  triggerSource,
-			"channel_type":    channelType,
-			"channel_id":      channelID,
-			"thread_id":       threadID,
-			"role":               messageRole,
+			"flow_id":           response.Execution.FloID,
+			"execution_id":      response.Execution.ID,
+			"sequence":          response.Execution.Sequence,
+			"author_id":         response.Execution.OwnerID,
+			"organisation_id":   stringOrEmpty(response.Flow.OrganisationID),
+			"runner_id":         s.state.ID,
+			"start_time":        time.Now().UTC().Format(time.RFC3339),
+			"trigger_type":      stringOrEmpty(response.Execution.TriggerType),
+			"author_email":      stringOrEmpty(response.Execution.AuthorEmail),
+			"triggerer_email":   stringOrEmpty(response.Execution.TriggererEmail),
+			"api_url":           apiURL,
+			"system_prompt":     systemPrompt,
+			"agent_id":          agentID,
+			"agent_user_id":     agentUserID,
+			"user_id":           userID,
+			"identities":        identities,
+			"user_variables":    userVariables,
+			"conversation_id":   conversationID,
+			"trigger_source":    triggerSource,
+			"channel_type":      channelType,
+			"channel_id":        channelID,
+			"thread_id":         threadID,
+			"role":              messageRole,
 			"page_access_token": pageAccessToken,
 			"plan_task_id":      planTaskID,
 			"system_flow":       response.Flow.SystemFlow,
@@ -631,9 +663,6 @@ func (s *Service) checkForExecutions() error {
 	}
 	_ = cancelled
 
-	// TODO: Give time for files to be written to disk
-	time.Sleep(time.Second * 5)
-
 	var state map[string]interface{}
 	stateRoot, err := os.OpenRoot(s.config.ExecutionConfig.ExecutionDirectory)
 	if err != nil {
@@ -642,7 +671,12 @@ func (s *Service) checkForExecutions() error {
 	}
 	defer func() { _ = stateRoot.Close() }()
 	stateRelPath := filepath.Join(response.Execution.FloID, response.Execution.ID, "state.json")
-	sb, err := stateRoot.ReadFile(stateRelPath)
+	// The executor process has already exited (Execute returns via cmd.Wait), so
+	// state.json is flushed and durable — no fixed multi-second wait is needed.
+	// readStateWithRetry returns on the first successful read (typically
+	// immediately), replacing the old blind 5-second sleep that floored every
+	// execution at 5s+.
+	sb, err := readStateWithRetry(stateRoot, stateRelPath)
 	if err != nil {
 		log.WithFields(log.Fields{
 			"error": err,
