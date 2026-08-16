@@ -1,6 +1,6 @@
 module flomation.app/automate/runner
 
-go 1.26.5
+go 1.26.6
 
 require (
 	github.com/flomation-co/go-config v0.0.0-20260116170906-0989aa9f4668
