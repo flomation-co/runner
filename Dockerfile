@@ -8,26 +8,39 @@ RUN apk add --no-cache \
      procps\
      clamav
 
-# Create flomation user and group
-RUN addgroup -S flomation && adduser -S flomation -G flomation &&\
+# Create the flomation user and group, pinned to an explicit uid/gid, and set up
+# the runner's home.
+#
+# The -u/-g pinning is the whole point. `adduser -S` with no -u takes the first
+# free system id, so this image previously landed on uid 101 rather than the 100
+# every other Flomation image used — `apk add clamav` above claims 100 first.
+# That made the runner's uid an accident of package ordering, and it would shift
+# again if the package list changed. This is the one component with a persistent
+# volume, so a silent uid shift makes an existing identity volume unreadable —
+# which the runner cannot distinguish from a first boot, so it enrols a
+# duplicate rather than failing.
+RUN addgroup -g 10001 -S flomation && \
+    adduser  -u 10001 -S flomation -G flomation && \
     mkdir -p /home/flomation/executor/lib/modules && \
     mkdir -p /home/flomation/workspace && \
     chown -R flomation:flomation /home/flomation
 
-# Copy the binary into the container
+# Copy the binaries and entrypoint into the container.
+# Owned by root and mode 0555: the application cannot rewrite its own
+# executables, and one COPY replaces COPY + chmod + chown, which previously
+# rewrote every byte of both binaries into a second image layer.
 ARG BINARY_FILE
-COPY ${BINARY_FILE} /usr/local/bin/flomation-executor
+COPY --chown=root:root --chmod=0555 ${BINARY_FILE} /usr/local/bin/flomation-executor
 
 ARG BINARY_FILE_2
-COPY ${BINARY_FILE_2} /usr/local/bin/flomation-runner
+COPY --chown=root:root --chmod=0555 ${BINARY_FILE_2} /usr/local/bin/flomation-runner
 
-# Copy the entrypoint script
-COPY entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/* && \
-    chown flomation:flomation /usr/local/bin/*
+COPY --chown=root:root --chmod=0555 entrypoint.sh /usr/local/bin/entrypoint.sh
 
-# Switch to flomation user
-USER flomation
+# Numeric rather than a name: with `runAsNonRoot: true` the kubelet refuses an
+# image whose USER is a name, because it cannot verify the name is not root.
+# The account is still called `flomation`, so `ps` and `ls -l` stay readable.
+USER 10001:10001
 
 # Health check - verify the application process is running
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
